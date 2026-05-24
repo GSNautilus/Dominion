@@ -5,6 +5,13 @@
 A napari-based workflow for quantitatively segmenting and tessellating astrocyte
 domains from 2D GFAP+DAPI immunofluorescence images.
 
+![Dominion in GFAP-only mode: 462 astrocyte seeds, 462 tessellated territories overlaid on a tissue section.](docs/gfap_mode_tessellation.png)
+
+*Dominion in `--mode gfap` on a tissue section. Right: GFAP seed-finding and
+tessellation submenus. Center: the napari viewer showing watershed territories
+(one color per cell) overlaid on the GFAP signal; here, 462 detected peaks
+became 462 astrocyte territories.*
+
 ## What it does
 
 Given a two-channel fluorescence image — GFAP (astrocyte intermediate filaments)
