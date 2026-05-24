@@ -47,6 +47,9 @@ data/
 raw/
 results/
 outputs/
+
+# Dominion per-image caches (StarDist outputs, etc.)
+*.dominion_cache_*/
 *.tif
 *.tiff
 *.czi

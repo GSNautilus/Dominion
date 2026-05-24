@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dominion"
+version = "0.1.0"
+description = "Tessellation of astrocyte domains from 2D GFAP+DAPI immunofluorescence images."
+requires-python = ">=3.10"
+authors = [{ name = "Dominion authors" }]
+dependencies = [
+    "numpy",
+    "scikit-image",
+    "tifffile",
+    "napari[all]",
+    "pyqtgraph",
+    "magicgui",
+    "qtpy",
+    "stardist",
+    "csbdeep",
+    "tensorflow",
+]
+
+[project.scripts]
+dominion = "dominion.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dominion = ["py.typed"]
