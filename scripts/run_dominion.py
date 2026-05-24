@@ -8,7 +8,7 @@ from pathlib import Path
 import napari
 import numpy as np
 
-from dominion.app import build_dock_widget
+from dominion.app import MODES, build_dock_widget
 from dominion.io import load_image
 from dominion.state import AppState
 
@@ -22,7 +22,21 @@ def _auto_contrast_limits(arr: np.ndarray) -> tuple[float, float]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Launch the Dominion napari workflow.")
-    parser.add_argument("image_path", type=Path, help="Path to a CYX uint16 TIFF (c1=GFAP, c2=DAPI).")
+    parser.add_argument(
+        "image_path",
+        type=Path,
+        help="Path to a CYX uint16 TIFF (c1=GFAP, c2=DAPI).",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default="dapi",
+        help=(
+            "Pipeline variant: 'dapi' (default) uses the StarDist+classification "
+            "+ tessellation flow; 'gfap' uses the GFAP-only seed-finding + "
+            "tessellation flow."
+        ),
+    )
     args = parser.parse_args(argv)
 
     image = load_image(args.image_path)
@@ -51,8 +65,10 @@ def main(argv: list[str] | None = None) -> None:
         scale=scale,
     )
 
-    dock = build_dock_widget(state, viewer)
-    viewer.window.add_dock_widget(dock, name="Dominion", area="right")
+    dock = build_dock_widget(state, viewer, mode=args.mode)
+    viewer.window.add_dock_widget(
+        dock, name=f"Dominion ({args.mode})", area="right"
+    )
 
     napari.run()
 
