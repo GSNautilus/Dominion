@@ -1,0 +1,38 @@
+"""Dock widget composition for the Dominion napari workflow.
+
+The :func:`build_dock_widget` function is the future-plugin entry point:
+it consumes an :class:`AppState` and a napari ``Viewer`` and returns the
+fully-assembled dock widget. It must not touch the filesystem or
+``sys.argv``; all I/O lives in ``scripts/run_dominion.py``.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from qtpy.QtWidgets import QVBoxLayout, QWidget
+
+from . import submenu1_nuclei, submenu2_seeds, submenu3_tessellation
+from .state import AppState
+
+if TYPE_CHECKING:
+    import napari  # noqa: F401
+
+
+def build_dock_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
+    """Return the vertically stacked dock widget for the three submenus.
+
+    Plugin-portable: a future napari plugin's dock-widget contribution
+    should call this same function with its own ``state`` and ``viewer``.
+    """
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(4, 4, 4, 4)
+    layout.setSpacing(6)
+
+    layout.addWidget(submenu1_nuclei.build_widget(state, viewer))
+    layout.addWidget(submenu2_seeds.build_widget(state, viewer))
+    layout.addWidget(submenu3_tessellation.build_widget(state, viewer))
+    layout.addStretch(1)
+
+    return container
