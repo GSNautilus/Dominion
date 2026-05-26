@@ -8,9 +8,14 @@ elevation combines a smoothed signal image (low-elevation = bright =
 blended by the ``Signal influence`` slider. The result lands in
 ``state.tessellation``.
 
-Two size constraints are folded into the watershed itself (not applied
+Three constraints are folded into the watershed itself (not applied
 as post-filters):
 
+* **Min signal** — pixels whose smoothed signal falls below this
+  threshold are dropped from the effective watershed mask. Useful for
+  excluding low-signal background regions, tissue gaps, or any pixel
+  the user doesn't consider valid tessellation space. Applied to the
+  same smoothed signal used for elevation.
 * **Max domain area (µm²)** — each domain is trimmed to at most this
   many pixels (converted from µm²), keeping the pixels closest to its
   seed. Pixels beyond the per-domain cap become background. This is a
@@ -22,7 +27,7 @@ as post-filters):
   trim is re-applied after each re-watershed since neighbors grow when
   a seed is dropped. Loop is bounded to avoid pathological oscillation.
 
-Both default to 0 (off).
+All three default to 0 (off).
 """
 
 from __future__ import annotations
@@ -38,7 +43,7 @@ from skimage.segmentation import watershed
 
 from .state import AppState
 from .types import TessellationResult
-from .widgets.common import CollapsibleSection, NumericSlider
+from .widgets.common import CollapsibleSection, HistogramSlider, NumericSlider
 
 if TYPE_CHECKING:
     import napari  # noqa: F401
@@ -81,13 +86,15 @@ def _compute_tessellation(
     pixel_size_um: float,
     signal_influence: float,
     smoothing_sigma_um: float,
+    min_signal: float = 0.0,
     min_area_um2: float = 0.0,
     max_area_um2: float = 0.0,
 ) -> np.ndarray:
-    """Run the signal-guided seeded watershed with size constraints.
+    """Run the signal-guided seeded watershed with size + signal constraints.
 
     Returns int32 domain labels. Label ``k`` corresponds to ``seeds_rc[k-1]``
-    if that seed survived the min-area pruning, else label ``k`` is absent.
+    if that seed survived the min-area pruning AND landed inside the
+    effective mask, else label ``k`` is absent.
     """
     shape = signal.shape
     if seeds_rc.shape[0] == 0:
@@ -106,6 +113,14 @@ def _compute_tessellation(
     else:
         signal_smooth = signal_f
     signal_norm = signal_smooth / max(float(signal_smooth.max()), 1.0)
+
+    # Effective tessellation space: tissue minus any pixel whose smoothed
+    # signal is below the min_signal floor. Pixels outside this mask never
+    # get a domain label.
+    if min_signal > 0:
+        effective_mask = tissue & (signal_smooth >= float(min_signal))
+    else:
+        effective_mask = tissue
 
     markers = np.zeros(shape, dtype=np.int32)
     rows = np.clip(np.round(seeds_rc[:, 0]).astype(int), 0, shape[0] - 1)
@@ -131,7 +146,7 @@ def _compute_tessellation(
         dist_norm = dist_local / max(float(dist_local.max()), 1.0)
         elevation = si * (1.0 - signal_norm) + (1.0 - si) * dist_norm
         labels_local = watershed(
-            elevation, markers=current_markers, mask=tissue
+            elevation, markers=current_markers, mask=effective_mask
         ).astype(np.int32)
         if max_area_px > 0:
             labels_local = _trim_to_max_area(labels_local, dist_local, max_area_px)
@@ -172,6 +187,9 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     sigma_slider = NumericSlider(
         "Smoothing σ (µm)", 0.0, 10.0, step=0.1, value=2.0, decimals=1
     )
+    min_signal_slider = HistogramSlider(
+        "Min signal", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+    )
     min_area_slider = NumericSlider(
         "Min domain area (µm²)", 0.0, 5000.0, step=25.0, value=0.0, decimals=0
     )
@@ -184,6 +202,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
     content_layout.addWidget(signal_slider)
     content_layout.addWidget(sigma_slider)
+    content_layout.addWidget(min_signal_slider)
     content_layout.addWidget(min_area_slider)
     content_layout.addWidget(max_area_slider)
     content_layout.addWidget(run_button)
@@ -192,6 +211,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
     # Disabled until seeds become available.
     content.setEnabled(False)
+
+    suppress: dict = {"on": False}
 
     def _update_layer(domain_labels: np.ndarray) -> None:
         """Push labels to the napari Labels layer, creating or replacing in place."""
@@ -229,6 +250,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         centroids = state.nuclei.centroids
         signal_influence = signal_slider.value()
         smoothing_sigma_um = sigma_slider.value()
+        min_signal = min_signal_slider.value()
         min_area_um2 = min_area_slider.value()
         max_area_um2 = max_area_slider.value()
 
@@ -244,6 +266,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 pixel_size_um=state.image.pixel_size_um,
                 signal_influence=signal_influence,
                 smoothing_sigma_um=smoothing_sigma_um,
+                min_signal=min_signal,
                 min_area_um2=min_area_um2,
                 max_area_um2=max_area_um2,
             )
@@ -259,6 +282,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 params={
                     "signal_influence": float(signal_influence),
                     "smoothing_sigma_um": float(smoothing_sigma_um),
+                    "min_signal": float(min_signal),
                     "min_area_um2": float(min_area_um2),
                     "max_area_um2": float(max_area_um2),
                 },
@@ -300,6 +324,31 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         ) else "tessellate"
         count_label.setText(f"{n_seeds} seeds — click Run to {verb}")
 
+    def _on_image_changed() -> None:
+        """Reconfigure the min-signal HistogramSlider from the loaded image's
+        in-tissue signal distribution."""
+        if state.image is None:
+            return
+        img = state.image
+        sig_in_tissue = img.signal[img.tissue_mask]
+        if sig_in_tissue.size == 0:
+            return
+        upper = float(np.percentile(sig_in_tissue, 99.5))
+        if upper <= 0:
+            upper = float(sig_in_tissue.max() or 1.0)
+        suppress["on"] = True
+        try:
+            min_signal_slider.set_range(0.0, max(upper, 1.0), step=1.0)
+            min_signal_slider.set_data(sig_in_tissue, bins=100)
+            min_signal_slider.set_value(0.0)
+        finally:
+            suppress["on"] = False
+
     state.subscribe("seeds", _on_seeds_changed)
+    state.subscribe("image", _on_image_changed)
+
+    # Handle the case where image was already set before we subscribed.
+    if state.image is not None:
+        _on_image_changed()
 
     return section
