@@ -30,11 +30,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--mode",
         choices=MODES,
-        default="dapi",
+        default="gfap",
         help=(
-            "Pipeline variant: 'dapi' (default) uses the StarDist+classification "
-            "+ tessellation flow; 'gfap' uses the GFAP-only seed-finding + "
-            "tessellation flow."
+            "Pipeline variant: 'gfap' (default) uses the GFAP-only seed-finding "
+            "+ tessellation flow; 'dapi' uses the StarDist+classification + "
+            "tessellation flow (requires a CYX TIFF with a DAPI channel)."
         ),
     )
     args = parser.parse_args(argv)
@@ -56,14 +56,15 @@ def main(argv: list[str] | None = None) -> None:
         contrast_limits=_auto_contrast_limits(image.gfap),
         scale=scale,
     )
-    viewer.add_image(
-        image.dapi,
-        name="DAPI",
-        colormap="blue",
-        blending="additive",
-        contrast_limits=_auto_contrast_limits(image.dapi),
-        scale=scale,
-    )
+    if image.dapi is not None:
+        viewer.add_image(
+            image.dapi,
+            name="DAPI",
+            colormap="blue",
+            blending="additive",
+            contrast_limits=_auto_contrast_limits(image.dapi),
+            scale=scale,
+        )
 
     dock = build_dock_widget(state, viewer, mode=args.mode)
     viewer.window.add_dock_widget(

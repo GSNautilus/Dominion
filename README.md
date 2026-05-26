@@ -35,7 +35,28 @@ more honest approximation.
 
 Dominion ships with two pipelines that share a tessellation step.
 
-### `--mode dapi` (default): three-stage pipeline
+### `--mode gfap` (default): two-stage pipeline
+
+```
+[GFAP] -> find peaks directly -> seeded watershed on GFAP
+```
+
+1. **GFAP seed-finding** — either local-maxima of smoothed GFAP, or peaks of
+   the distance transform of thresholded GFAP. Each peak is taken as an
+   astrocyte center.
+2. **Tessellation** — GFAP-guided seeded watershed within the tissue mask,
+   one territory per kept seed.
+
+This is the default because GFAP carries the astrocyte-specific signal directly
+and DAPI is rarely a clean source of astrocyte identity. Fewer parameters,
+more direct biological interpretation. Accepts either single-channel GFAP TIFFs
+or 2-channel CYX TIFFs (the DAPI channel is just ignored in this mode).
+
+Won't necessarily catch every astrocyte — especially reactive astrocytes with
+diffuse GFAP and no clear soma peak. The distance-transform method is more
+robust to this than local-maxima.
+
+### `--mode dapi`: three-stage pipeline
 
 ```
 [DAPI] -> StarDist nuclei -> filter by GFAP context -> seeded watershed on GFAP
@@ -46,27 +67,11 @@ Dominion ships with two pipelines that share a tessellation step.
 2. **Astrocyte classification** — for each nucleus, compute a score from the
    surrounding GFAP (intensity within a disc, weighted by distance from the
    centroid). Threshold the score to select astrocyte seeds.
-3. **Tessellation** — GFAP-guided seeded watershed within the tissue mask,
-   one territory per kept seed.
+3. **Tessellation** — same as gfap mode.
 
 Best when DAPI is clean and you want per-nucleus tracking through the pipeline.
-The classification step is doing the work of filtering non-astrocyte nuclei.
-
-### `--mode gfap`: two-stage pipeline
-
-```
-[GFAP] -> find peaks directly -> seeded watershed on GFAP
-```
-
-1. **GFAP seed-finding** — either local-maxima of smoothed GFAP, or peaks of
-   the distance transform of thresholded GFAP. Each peak is taken as an
-   astrocyte center.
-2. **Tessellation** — same as dapi mode.
-
-Best when DAPI is noisy or unreliable, or when you trust GFAP intensity as the
-primary localization signal. Fewer parameters, more direct biological
-interpretation. Won't necessarily catch every astrocyte (especially reactive
-astrocytes with diffuse GFAP and no clear soma peak).
+The classification step does the work of filtering non-astrocyte nuclei.
+Requires a 2-channel CYX TIFF (GFAP=channel 0, DAPI=channel 1).
 
 ## Installation
 
@@ -102,17 +107,18 @@ just won't get GPU acceleration on Windows native.
 ## Usage
 
 ```bash
-python scripts/run_dominion.py path/to/image.tif                # dapi mode
-python scripts/run_dominion.py path/to/image.tif --mode gfap    # gfap mode
+python scripts/run_dominion.py path/to/image.tif                # gfap mode (default)
+python scripts/run_dominion.py path/to/image.tif --mode dapi    # dapi mode
 ```
 
-The image must be a 2D CYX TIFF with at least two channels:
+Accepted input formats:
 
-- channel 0: GFAP
-- channel 1: DAPI (required for dapi mode, unused in gfap mode)
+- **Single-channel 2D TIFF** — treated as GFAP. Works in gfap mode only.
+- **2-channel CYX TIFF** — channel 0 = GFAP, channel 1 = DAPI. Works in both modes.
 
-Non-tissue pixels are expected to be zero in both channels (the tissue mask is
-derived from `(GFAP > 0) | (DAPI > 0)`). Pre-mask non-tissue before loading.
+Non-tissue pixels are expected to be zero (the tissue mask is derived from the
+non-zero footprint of the available channels). Pre-mask non-tissue before
+loading.
 
 Pixel size is read from the TIFF resolution metadata (ImageJ convention: `unit=µm`,
 `XResolution` in pixels/µm). If missing, the pipeline falls back to 1.0 µm/pixel

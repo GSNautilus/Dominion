@@ -217,6 +217,9 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         if image is None:
             _set_status("No image loaded")
             return
+        if image.dapi is None:
+            _set_status("No DAPI channel — load a CYX TIFF or use --mode gfap")
+            return
 
         prob_thresh = float(prob_slider.value())
         nms_thresh = float(nms_slider.value())
