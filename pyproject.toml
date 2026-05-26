@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dominion"
 version = "0.1.0"
-description = "Tessellation of astrocyte domains from 2D GFAP+DAPI immunofluorescence images."
+description = "DOMINION: tessellation of object domains from 2D immunofluorescence images."
 requires-python = ">=3.10"
-authors = [{ name = "Dominion authors" }]
+authors = [{ name = "DOMINION authors" }]
 dependencies = [
     "numpy",
     "scikit-image",

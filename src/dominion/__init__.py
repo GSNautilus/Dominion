@@ -1,4 +1,4 @@
-"""Dominion: tessellation of object domains from 2D immunofluorescence images.
+"""DOMINION: tessellation of object domains from 2D immunofluorescence images.
 
 DOMain Identification for Networks of Immunolabeled Object Neighborhoods.
 """

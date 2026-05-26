@@ -1,4 +1,4 @@
-"""CLI entry point for the Dominion napari workflow."""
+"""CLI entry point for the DOMINION napari workflow."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _auto_contrast_limits(arr: np.ndarray) -> tuple[float, float]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Launch the Dominion napari workflow.")
+    parser = argparse.ArgumentParser(description="Launch the DOMINION napari workflow.")
     parser.add_argument(
         "image_path",
         type=Path,
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> None:
 
     dock = build_dock_widget(state, viewer, mode=args.mode)
     viewer.window.add_dock_widget(
-        dock, name=f"Dominion ({args.mode})", area="right"
+        dock, name=f"DOMINION ({args.mode})", area="right"
     )
 
     napari.run()

@@ -1,4 +1,4 @@
-"""Filesystem caching helpers for Dominion intermediate results.
+"""Filesystem caching helpers for DOMINION intermediate results.
 
 Each cache file is named after a (kind, params) pair and lives next to
 the source image in a sibling ``<stem>.dominion_cache`` directory. The
