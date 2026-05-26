@@ -43,9 +43,13 @@ def _parse_unit_from_description(description: str | None) -> str | None:
 
 
 def load_image(path: Path) -> ImageData:
-    """Load a CYX uint16 TIFF and return an :class:`ImageData`.
+    """Load a TIFF and return an :class:`ImageData`.
 
-    The first two channels are interpreted as GFAP and DAPI respectively.
+    Accepts either a 2D single-channel image (treated as GFAP, with DAPI
+    set to ``None``) or a 3D CYX stack where channel 0 is GFAP and
+    channel 1 is DAPI. Single-channel input works with ``--mode gfap``;
+    ``--mode dapi`` requires both channels.
+
     Pixel size is parsed from the TIFF ``XResolution`` tag using the
     convention ``pixels_per_um = num/den`` (i.e. ImageJ writes resolution
     in pixels-per-unit). If the resolution unit is present and is not
@@ -60,13 +64,17 @@ def load_image(path: Path) -> ImageData:
         desc_tag = page.tags.get("ImageDescription", None)
         description = desc_tag.value if desc_tag is not None else None
 
-    if arr.ndim != 3 or arr.shape[0] < 2:
+    if arr.ndim == 2:
+        gfap = arr
+        dapi = None
+    elif arr.ndim == 3 and arr.shape[0] >= 1:
+        gfap = arr[0]
+        dapi = arr[1] if arr.shape[0] >= 2 else None
+    else:
         raise ValueError(
-            f"Expected CYX TIFF with at least 2 channels, got shape {arr.shape}"
+            f"Expected a 2D single-channel TIFF or a 3D CYX TIFF, "
+            f"got shape {arr.shape}"
         )
-
-    gfap = arr[0]
-    dapi = arr[1]
 
     # Resolve pixel size.
     pixel_size_um = 1.0
@@ -101,7 +109,7 @@ def load_image(path: Path) -> ImageData:
             else:
                 pixel_size_um = 1.0 / pixels_per_um
 
-    tissue_mask = (gfap > 0) | (dapi > 0)
+    tissue_mask = (gfap > 0) if dapi is None else ((gfap > 0) | (dapi > 0))
 
     return ImageData(
         gfap=gfap,

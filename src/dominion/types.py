@@ -6,6 +6,7 @@ rename fields without a coordinated change across all submenus.
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -13,7 +14,7 @@ import numpy as np
 @dataclass
 class ImageData:
     gfap: np.ndarray              # 2D uint16
-    dapi: np.ndarray              # 2D uint16
+    dapi: Optional[np.ndarray]    # 2D uint16, or None for single-channel input
     tissue_mask: np.ndarray       # 2D bool
     pixel_size_um: float
     source_path: Path

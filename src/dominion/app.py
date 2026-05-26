@@ -24,20 +24,20 @@ if TYPE_CHECKING:
     import napari  # noqa: F401
 
 
-MODES = ("dapi", "gfap")
+MODES = ("gfap", "dapi")
 
 
 def build_dock_widget(
-    state: AppState, viewer: "napari.Viewer", mode: str = "dapi"
+    state: AppState, viewer: "napari.Viewer", mode: str = "gfap"
 ) -> QWidget:
     """Return the dock widget for the chosen pipeline ``mode``.
 
     Two modes are supported:
 
-    * ``"dapi"`` (default): the three-stage DAPI+GFAP pipeline —
-      StarDist nuclei → astrocyte classification → tessellation.
-    * ``"gfap"``: the two-stage GFAP-only pipeline —
+    * ``"gfap"`` (default): the two-stage GFAP-only pipeline —
       GFAP seed-finding → tessellation.
+    * ``"dapi"``: the three-stage DAPI+GFAP pipeline —
+      StarDist nuclei → astrocyte classification → tessellation.
 
     Plugin-portable: a future napari plugin's dock-widget contribution
     should call this same function with its own ``state``, ``viewer``,
