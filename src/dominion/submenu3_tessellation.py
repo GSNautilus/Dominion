@@ -7,6 +7,22 @@ elevation combines a smoothed signal image (low-elevation = bright =
 "inside" an object) and a distance transform from the seed markers,
 blended by the ``Signal influence`` slider. The result lands in
 ``state.tessellation``.
+
+Two size constraints are folded into the watershed itself (not applied
+as post-filters):
+
+* **Max domain area (µm²)** — each domain is trimmed to at most this
+  many pixels (converted from µm²), keeping the pixels closest to its
+  seed. Pixels beyond the per-domain cap become background. This is a
+  true area cap, not a radius approximation.
+* **Min domain area (µm²)** — after a watershed pass, any domain
+  smaller than the threshold has its seed removed and the watershed is
+  re-run on the reduced seed set. Tiny domains thus get absorbed into
+  their neighbors rather than left as orphan slivers. The max-area
+  trim is re-applied after each re-watershed since neighbors grow when
+  a seed is dropped. Loop is bounded to avoid pathological oscillation.
+
+Both default to 0 (off).
 """
 
 from __future__ import annotations
@@ -29,6 +45,33 @@ if TYPE_CHECKING:
 
 
 _LAYER_NAME = "Domains"
+_MIN_AREA_ITER_CAP = 5  # safety bound on the min-area re-watershed loop
+
+
+def _trim_to_max_area(
+    labels: np.ndarray, dist: np.ndarray, max_area_px: float
+) -> np.ndarray:
+    """For each domain over ``max_area_px`` pixels, drop the pixels furthest
+    from the seed until the domain fits the cap. Returns ``labels`` modified
+    in place.
+    """
+    if max_area_px <= 0:
+        return labels
+    cap = int(np.floor(max_area_px))
+    if cap <= 0:
+        # Pathologically small cap — wipe every labeled pixel.
+        labels[labels > 0] = 0
+        return labels
+    unique_labels, counts = np.unique(labels[labels > 0], return_counts=True)
+    for k, c in zip(unique_labels, counts):
+        if c <= cap:
+            continue
+        domain_mask = labels == k
+        d = dist[domain_mask]
+        # k-th smallest distance (0-indexed cap-1) is the inclusive cutoff.
+        threshold = float(np.partition(d, cap - 1)[cap - 1])
+        labels[domain_mask & (dist > threshold)] = 0
+    return labels
 
 
 def _compute_tessellation(
@@ -38,11 +81,21 @@ def _compute_tessellation(
     pixel_size_um: float,
     signal_influence: float,
     smoothing_sigma_um: float,
+    min_area_um2: float = 0.0,
+    max_area_um2: float = 0.0,
 ) -> np.ndarray:
-    """Run the signal-guided seeded watershed and return int32 domain labels."""
+    """Run the signal-guided seeded watershed with size constraints.
+
+    Returns int32 domain labels. Label ``k`` corresponds to ``seeds_rc[k-1]``
+    if that seed survived the min-area pruning, else label ``k`` is absent.
+    """
     shape = signal.shape
     if seeds_rc.shape[0] == 0:
         return np.zeros(shape, dtype=np.int32)
+
+    ppx2 = max(float(pixel_size_um) ** 2, 1e-12)
+    min_area_px = float(min_area_um2) / ppx2 if min_area_um2 > 0 else 0.0
+    max_area_px = float(max_area_um2) / ppx2 if max_area_um2 > 0 else 0.0
 
     signal_f = signal.astype(np.float32, copy=False)
     sigma_px = max(float(smoothing_sigma_um) / max(float(pixel_size_um), 1e-9), 0.0)
@@ -59,14 +112,51 @@ def _compute_tessellation(
     cols = np.clip(np.round(seeds_rc[:, 1]).astype(int), 0, shape[1] - 1)
     markers[rows, cols] = np.arange(1, seeds_rc.shape[0] + 1, dtype=np.int32)
 
-    seed_indicator = markers > 0
-    dist = ndi.distance_transform_edt(~seed_indicator).astype(np.float32)
-    dist_norm = dist / max(float(dist.max()), 1.0)
-
     si = float(signal_influence)
-    elevation = si * (1.0 - signal_norm) + (1.0 - si) * dist_norm
 
-    return watershed(elevation, markers=markers, mask=tissue).astype(np.int32)
+    def _watershed_round(current_markers: np.ndarray):
+        """Run one watershed pass for the given marker set; apply max-area
+        trim afterward. Returns ``(labels, dist_to_nearest_seed)`` so callers
+        can re-use the distance map for downstream area trimming.
+        """
+        seed_indicator = current_markers > 0
+        if not seed_indicator.any():
+            return (
+                np.zeros(shape, dtype=np.int32),
+                np.zeros(shape, dtype=np.float32),
+            )
+        dist_local = ndi.distance_transform_edt(~seed_indicator).astype(
+            np.float32, copy=False
+        )
+        dist_norm = dist_local / max(float(dist_local.max()), 1.0)
+        elevation = si * (1.0 - signal_norm) + (1.0 - si) * dist_norm
+        labels_local = watershed(
+            elevation, markers=current_markers, mask=tissue
+        ).astype(np.int32)
+        if max_area_px > 0:
+            labels_local = _trim_to_max_area(labels_local, dist_local, max_area_px)
+        return labels_local, dist_local
+
+    labels, _dist = _watershed_round(markers)
+
+    if min_area_px > 0:
+        for _ in range(_MIN_AREA_ITER_CAP):
+            unique_labels, counts = np.unique(
+                labels[labels > 0], return_counts=True
+            )
+            if unique_labels.size == 0:
+                break
+            tiny = unique_labels[counts < min_area_px]
+            if tiny.size == 0:
+                break
+            tiny_positions = np.isin(markers, tiny)
+            if not tiny_positions.any():
+                break
+            markers = markers.copy()
+            markers[tiny_positions] = 0
+            labels, _dist = _watershed_round(markers)
+
+    return labels
 
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
@@ -82,12 +172,20 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     sigma_slider = NumericSlider(
         "Smoothing σ (µm)", 0.0, 10.0, step=0.1, value=2.0, decimals=1
     )
+    min_area_slider = NumericSlider(
+        "Min domain area (µm²)", 0.0, 5000.0, step=25.0, value=0.0, decimals=0
+    )
+    max_area_slider = NumericSlider(
+        "Max domain area (µm²)", 0.0, 100000.0, step=500.0, value=0.0, decimals=0
+    )
     run_button = QPushButton("Run tessellation")
     count_label = QLabel("0 domains generated")
     count_label.setAlignment(Qt.AlignLeft)
 
     content_layout.addWidget(signal_slider)
     content_layout.addWidget(sigma_slider)
+    content_layout.addWidget(min_area_slider)
+    content_layout.addWidget(max_area_slider)
     content_layout.addWidget(run_button)
     content_layout.addWidget(count_label)
     section.set_content(content)
@@ -131,6 +229,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         centroids = state.nuclei.centroids
         signal_influence = signal_slider.value()
         smoothing_sigma_um = sigma_slider.value()
+        min_area_um2 = min_area_slider.value()
+        max_area_um2 = max_area_slider.value()
 
         if kept.size == 0:
             domain_labels = np.zeros(state.image.signal.shape, dtype=np.int32)
@@ -144,6 +244,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 pixel_size_um=state.image.pixel_size_um,
                 signal_influence=signal_influence,
                 smoothing_sigma_um=smoothing_sigma_um,
+                min_area_um2=min_area_um2,
+                max_area_um2=max_area_um2,
             )
             n_unique = int(np.unique(domain_labels[domain_labels > 0]).size)
 
@@ -157,6 +259,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 params={
                     "signal_influence": float(signal_influence),
                     "smoothing_sigma_um": float(smoothing_sigma_um),
+                    "min_area_um2": float(min_area_um2),
+                    "max_area_um2": float(max_area_um2),
                 },
             ),
         )
