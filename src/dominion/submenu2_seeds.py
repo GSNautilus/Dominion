@@ -1,20 +1,20 @@
-"""Submenu 2 — astrocyte classification / seed selection.
+"""Submenu 2 — object classification / seed selection.
 
-For each candidate nucleus, compute a GFAP-based "astrocyte-likeness"
+For each candidate nucleus, compute a signal-based "object-likeness"
 score over a disc of radius ``R`` around its centroid, then keep nuclei
 whose score exceeds a user-tunable threshold ``theta``.
 
 The score for nucleus *i* is
 
-    score_i = sum_{p in P_i} ( alpha * gfap[p]
+    score_i = sum_{p in P_i} ( alpha * signal[p]
                               + (1 - alpha) * (R_px - dist(p, c_i)) )
 
 where ``P_i`` is the set of pixels within ``R_px`` of the centroid that
-also lie in the tissue mask and exceed the GFAP threshold ``T``.
+also lie in the tissue mask and exceed the signal threshold ``T``.
 
 Four sliders drive the computation:
 
-* ``T``      — GFAP+ intensity threshold (recompute scores)
+* ``T``      — signal intensity threshold (recompute scores)
 * ``R``      — search radius in microns (recompute scores)
 * ``alpha``  — intensity-vs-distance weighting in [0, 1] (recompute scores)
 * ``theta``  — score threshold for keeping a seed (filter only)
@@ -28,14 +28,14 @@ import numpy as np
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .state import AppState
-from .types import AstrocyteSeedsResult
+from .types import SeedsResult
 from .widgets.common import CollapsibleSection, HistogramSlider, NumericSlider
 
 if TYPE_CHECKING:
     import napari  # noqa: F401
 
 
-_SEEDS_LAYER_NAME = "Astrocyte seeds"
+_SEEDS_LAYER_NAME = "Object seeds"
 # Default per-point size at layer creation. Uniform across kept/rejected so
 # napari's built-in "point size" UI slider can control all of them. After
 # creation we never re-assign `layer.size`, so user resizing via the UI
@@ -45,25 +45,25 @@ _DEFAULT_SIZE_FACTOR = 6.0
 
 
 def _compute_scores(
-    gfap: np.ndarray,
+    signal: np.ndarray,
     tissue_mask: np.ndarray,
     centroids: np.ndarray,
     T: float,
     R_px: float,
     alpha: float,
 ) -> np.ndarray:
-    """Per-nucleus astrocyte-likeness score (see module docstring)."""
+    """Per-nucleus object-likeness score (see module docstring)."""
     n = centroids.shape[0]
     scores = np.zeros(n, dtype=np.float64)
     if n == 0 or R_px <= 0:
         return scores
 
-    H, W = gfap.shape
+    H, W = signal.shape
     r_ceil = int(np.ceil(R_px))
     r2 = R_px * R_px
 
     # Pre-cast for speed.
-    gfap_f = gfap.astype(np.float64, copy=False)
+    signal_f = signal.astype(np.float64, copy=False)
 
     for i in range(n):
         cy, cx = float(centroids[i, 0]), float(centroids[i, 1])
@@ -80,16 +80,16 @@ def _compute_scores(
         dx2 = xs[None, :] ** 2
         d2 = dy2 + dx2
 
-        crop_gfap = gfap_f[y0:y1, x0:x1]
+        crop_signal = signal_f[y0:y1, x0:x1]
         crop_tissue = tissue_mask[y0:y1, x0:x1]
 
-        mask = (d2 <= r2) & crop_tissue & (crop_gfap >= T)
+        mask = (d2 <= r2) & crop_tissue & (crop_signal >= T)
         if not mask.any():
             continue
 
         # Sum the score contributions over positive pixels only.
         dist = np.sqrt(d2[mask])
-        intens = crop_gfap[mask]
+        intens = crop_signal[mask]
         scores[i] = float(
             alpha * intens.sum() + (1.0 - alpha) * (R_px - dist).sum()
         )
@@ -98,8 +98,8 @@ def _compute_scores(
 
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
-    """Return the astrocyte-classification submenu."""
-    section = CollapsibleSection("Astrocyte classification")
+    """Return the object-classification submenu."""
+    section = CollapsibleSection("Object classification")
 
     content = QWidget()
     layout = QVBoxLayout(content)
@@ -107,7 +107,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.setSpacing(4)
 
     t_slider = HistogramSlider(
-        "GFAP+ threshold T", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+        "Signal threshold T", 0.0, 1.0, step=1.0, value=0.0, decimals=1
     )
     r_slider = NumericSlider(
         "Search radius R (µm)", 1.0, 50.0, step=0.5, value=10.0, decimals=1
@@ -198,12 +198,12 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         # AppState semantics, but we set without triggering nuclei-clearing.
         state.set(
             "seeds",
-            AstrocyteSeedsResult(
+            SeedsResult(
                 kept_indices=kept, scores=scores.copy(), params=params
             ),
         )
         summary_label.setText(
-            f"{scores.size} nuclei → {kept.size} kept as astrocyte seeds"
+            f"{scores.size} nuclei → {kept.size} kept as object seeds"
         )
         _refresh_layer(kept)
         return kept
@@ -218,7 +218,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         alpha = float(alpha_slider.value())
 
         scores = _compute_scores(
-            img.gfap, img.tissue_mask, centroids, T, R_px, alpha
+            img.signal, img.tissue_mask, centroids, T, R_px, alpha
         )
         cache["scores"] = scores
         cache["centroids"] = centroids
@@ -276,24 +276,24 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             return
         content.setEnabled(True)
 
-        # Configure T slider from GFAP-in-tissue distribution.
+        # Configure T slider from signal-in-tissue distribution.
         img = state.image
-        gfap_in_tissue = img.gfap[img.tissue_mask]
-        if gfap_in_tissue.size == 0:
-            t_upper = float(img.gfap.max() or 1.0)
+        signal_in_tissue = img.signal[img.tissue_mask]
+        if signal_in_tissue.size == 0:
+            t_upper = float(img.signal.max() or 1.0)
             t_default = 0.0
         else:
-            t_upper = float(np.percentile(gfap_in_tissue, 99.5))
+            t_upper = float(np.percentile(signal_in_tissue, 99.5))
             if t_upper <= 0:
-                t_upper = float(gfap_in_tissue.max() or 1.0)
-            nonzero = gfap_in_tissue[gfap_in_tissue > 0]
+                t_upper = float(signal_in_tissue.max() or 1.0)
+            nonzero = signal_in_tissue[signal_in_tissue > 0]
             t_default = (
                 float(np.median(nonzero)) if nonzero.size else 0.0
             )
         suppress["on"] = True
         try:
             t_slider.set_range(0.0, max(t_upper, 1.0), step=1.0)
-            t_slider.set_data(gfap_in_tissue, bins=100)
+            t_slider.set_data(signal_in_tissue, bins=100)
             t_slider.set_value(min(t_default, t_upper))
         finally:
             suppress["on"] = False

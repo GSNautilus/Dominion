@@ -1,21 +1,22 @@
-"""Submenu A — GFAP-only astrocyte seed-finding.
+"""Submenu A — signal-based object seed-finding.
 
-The alternative to the DAPI+classification pair (submenus 1 + 2). Reads
-only the GFAP channel and produces a set of seeds directly, by either:
+The alternative to the nuclei+classification pair (submenus 1 + 2).
+Reads only the signal channel and produces a set of seeds directly, by
+either:
 
-* finding local maxima of smoothed GFAP, or
-* finding peaks of the distance transform of thresholded GFAP.
+* finding local maxima of the smoothed signal, or
+* finding peaks of the distance transform of the thresholded signal.
 
 The user picks the algorithm from a combobox. Three sliders drive the
-detection (smoothing, GFAP threshold, minimum peak distance) and are
+detection (smoothing, signal threshold, minimum peak distance) and are
 gated on a Run button. A fourth slider — peak strength — stays live as
 a post-Run re-filter on the cached peak list.
 
 State flow: on Run, the filtered peaks are written into ``state.nuclei``
-as a synthetic :class:`NucleiResult` (label_mask is empty; centroids are
-the peak coords) and immediately published as a
-:class:`AstrocyteSeedsResult` with ``kept_indices = arange(N)``. The
-existing submenu 3 (tessellation) consumes those unchanged.
+as a synthetic :class:`NucleiResult` (label_mask is empty; centroids
+are the peak coords) and immediately published as a
+:class:`SeedsResult` with ``kept_indices = arange(N)``. The existing
+submenu 3 (tessellation) consumes those unchanged.
 """
 
 from __future__ import annotations
@@ -34,24 +35,24 @@ from qtpy.QtWidgets import (
 
 from .seedfind import find_seeds_dist_transform_peaks, find_seeds_local_max
 from .state import AppState
-from .types import AstrocyteSeedsResult, NucleiResult
+from .types import NucleiResult, SeedsResult
 from .widgets.common import CollapsibleSection, HistogramSlider, NumericSlider
 
 if TYPE_CHECKING:
     import napari  # noqa: F401
 
 
-_SEEDS_LAYER_NAME = "Astrocyte seeds"
+_SEEDS_LAYER_NAME = "Object seeds"
 _DEFAULT_SIZE_FACTOR = 6.0  # matches submenu 2 so napari UI behaves the same
 
-_METHOD_LOCAL_MAX = "Local maxima of smoothed GFAP"
-_METHOD_DIST_PEAKS = "Distance-transform peaks of thresholded GFAP"
+_METHOD_LOCAL_MAX = "Local maxima of smoothed signal"
+_METHOD_DIST_PEAKS = "Distance-transform peaks of thresholded signal"
 _METHODS = [_METHOD_LOCAL_MAX, _METHOD_DIST_PEAKS]
 
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
-    """Return the GFAP-only seed-finding submenu."""
-    section = CollapsibleSection("GFAP seed-finding")
+    """Return the signal-based seed-finding submenu."""
+    section = CollapsibleSection("Signal seed-finding")
 
     content = QWidget()
     layout = QVBoxLayout(content)
@@ -73,7 +74,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         "Smoothing σ (µm)", 0.0, 20.0, step=0.1, value=5.0, decimals=1
     )
     threshold_slider = HistogramSlider(
-        "GFAP threshold", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+        "Signal threshold", 0.0, 1.0, step=1.0, value=0.0, decimals=1
     )
     min_dist_slider = NumericSlider(
         "Min peak distance (µm)", 1.0, 100.0, step=0.5, value=15.0, decimals=1
@@ -162,20 +163,20 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         img = state.image
         n = filtered_peaks.shape[0]
         nuclei = NucleiResult(
-            label_mask=np.zeros(img.gfap.shape, dtype=np.int32),
+            label_mask=np.zeros(img.signal.shape, dtype=np.int32),
             centroids=filtered_peaks,
-            params={"source": "gfap_seedfind", "method": cache["method"]},
+            params={"source": "signal_seedfind", "method": cache["method"]},
         )
         # Setting nuclei clears seeds & tessellation in AppState; that's fine
         # — we set seeds right after.
         state.set("nuclei", nuclei)
-        seeds = AstrocyteSeedsResult(
+        seeds = SeedsResult(
             kept_indices=np.arange(n, dtype=np.int64),
             scores=filtered_values.astype(np.float64, copy=False),
             params={
                 "method": cache["method"],
                 "sigma_um": float(sigma_slider.value()),
-                "gfap_threshold": float(threshold_slider.value()),
+                "signal_threshold": float(threshold_slider.value()),
                 "min_distance_um": float(min_dist_slider.value()),
                 "peak_strength_threshold": float(peak_strength_slider.value()),
             },
@@ -217,7 +218,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         try:
             if method == _METHOD_LOCAL_MAX:
                 peaks, values = find_seeds_local_max(
-                    img.gfap,
+                    img.signal,
                     img.tissue_mask,
                     sigma_px=sigma_px,
                     threshold_abs=threshold,
@@ -225,7 +226,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 )
             else:  # _METHOD_DIST_PEAKS
                 peaks, values = find_seeds_dist_transform_peaks(
-                    img.gfap,
+                    img.signal,
                     img.tissue_mask,
                     sigma_px=sigma_px,
                     threshold_abs=threshold,
@@ -286,27 +287,27 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             return
         content.setEnabled(True)
 
-        # Configure the GFAP threshold slider from GFAP-in-tissue distribution.
+        # Configure the signal threshold slider from signal-in-tissue distribution.
         img = state.image
-        gfap_in_tissue = img.gfap[img.tissue_mask]
+        signal_in_tissue = img.signal[img.tissue_mask]
         suppress["on"] = True
         try:
-            if gfap_in_tissue.size == 0:
-                t_upper = float(img.gfap.max() or 1.0)
+            if signal_in_tissue.size == 0:
+                t_upper = float(img.signal.max() or 1.0)
                 t_default = 0.0
             else:
-                t_upper = float(np.percentile(gfap_in_tissue, 99.5))
+                t_upper = float(np.percentile(signal_in_tissue, 99.5))
                 if t_upper <= 0:
-                    t_upper = float(gfap_in_tissue.max() or 1.0)
-                nonzero = gfap_in_tissue[gfap_in_tissue > 0]
+                    t_upper = float(signal_in_tissue.max() or 1.0)
+                nonzero = signal_in_tissue[signal_in_tissue > 0]
                 t_default = float(np.median(nonzero)) if nonzero.size else 0.0
             threshold_slider.set_range(0.0, max(t_upper, 1.0), step=1.0)
-            threshold_slider.set_data(gfap_in_tissue, bins=100)
+            threshold_slider.set_data(signal_in_tissue, bins=100)
             threshold_slider.set_value(min(t_default, t_upper))
         finally:
             suppress["on"] = False
 
-        summary_label.setText("Click Run to find astrocyte seeds.")
+        summary_label.setText("Click Run to find object seeds.")
 
     def _set_strength_label_for_method(method: str) -> None:
         """Update the peak-strength slider's label to reflect what 'strength'

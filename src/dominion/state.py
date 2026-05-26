@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from .types import (
-    AstrocyteSeedsResult,
     ImageData,
     NucleiResult,
+    SeedsResult,
     TessellationResult,
 )
 
@@ -22,7 +22,7 @@ _SLOT_ORDER = ("image", "nuclei", "seeds", "tessellation")
 _SLOT_TYPES = {
     "image": ImageData,
     "nuclei": NucleiResult,
-    "seeds": AstrocyteSeedsResult,
+    "seeds": SeedsResult,
     "tessellation": TessellationResult,
 }
 
@@ -33,7 +33,7 @@ class AppState:
     def __init__(self) -> None:
         self.image: Optional[ImageData] = None
         self.nuclei: Optional[NucleiResult] = None
-        self.seeds: Optional[AstrocyteSeedsResult] = None
+        self.seeds: Optional[SeedsResult] = None
         self.tessellation: Optional[TessellationResult] = None
         self._subscribers: dict[str, list[Callable[[], None]]] = {
             slot: [] for slot in _SLOT_ORDER
