@@ -112,26 +112,40 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         except (KeyError, IndexError):
             return None
 
-    def _replace_layer(peaks: np.ndarray, pixel_size_um: float) -> None:
-        """Drop+re-add the seeds Points layer to dodge napari's stale per-point
-        property arrays when N changes (same trick as submenu 2)."""
+    def _update_layer(peaks: np.ndarray, pixel_size_um: float) -> None:
+        """Update the seeds Points layer in place, preserving user-controlled
+        size/color settings across Run and peak-strength changes.
+
+        All seeds in this mode share one color, so we set ``face_color`` as
+        a scalar at creation time — napari then broadcasts it to all points
+        and never builds a per-point array that would misindex when N
+        changes. After creation we only touch ``layer.data``; ``size`` and
+        ``face_color`` stay whatever the user has set in napari's UI.
+        """
         layer = _get_layer()
-        if layer is not None:
-            try:
-                viewer.layers.remove(layer)
-            except (KeyError, ValueError):
-                pass
-        # All-yellow (every peak is a kept seed in this mode).
-        n = peaks.shape[0]
-        face = np.tile(np.array([1.0, 1.0, 0.0, 1.0]), (n, 1))
-        viewer.add_points(
-            peaks,
-            name=_SEEDS_LAYER_NAME,
-            face_color=face,
-            size=_DEFAULT_SIZE_FACTOR * pixel_size_um,
-            scale=(pixel_size_um, pixel_size_um),
-            border_color="transparent",
-        )
+        if layer is None:
+            viewer.add_points(
+                peaks,
+                name=_SEEDS_LAYER_NAME,
+                face_color=[1.0, 1.0, 0.0, 1.0],  # scalar yellow
+                size=_DEFAULT_SIZE_FACTOR * pixel_size_um,
+                scale=(pixel_size_um, pixel_size_um),
+                border_color="transparent",
+            )
+        else:
+            # Snapshot the existing uniform size, then re-apply it as a scalar
+            # after the data swap. When N grows, napari otherwise fills new
+            # points with `current_size` (the initial default), not the user's
+            # tweaked value — making the size appear to "reset" on Run. Median
+            # is robust to any per-point noise napari may have introduced.
+            sz_arr = np.asarray(layer.size, dtype=float).ravel()
+            target_size = (
+                float(np.median(sz_arr))
+                if sz_arr.size
+                else _DEFAULT_SIZE_FACTOR * pixel_size_um
+            )
+            layer.data = peaks
+            layer.size = target_size
 
     def _drop_layer() -> None:
         layer = _get_layer()
@@ -167,7 +181,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             },
         )
         state.set("seeds", seeds)
-        _replace_layer(filtered_peaks, img.pixel_size_um)
+        _update_layer(filtered_peaks, img.pixel_size_um)
 
     def _apply_peak_strength_filter() -> None:
         """Filter cached peaks by peak_strength_slider and publish."""
