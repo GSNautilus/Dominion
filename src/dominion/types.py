@@ -1,7 +1,10 @@
 """Shared dataclasses for the Dominion pipeline.
 
-Downstream agents code against these exact signatures — do not add or
-rename fields without a coordinated change across all submenus.
+The pipeline is signal-agnostic: ``signal`` is the immunolabel-of-interest
+channel (intermediate-filament markers, membrane markers, anything that
+delineates the objects you're partitioning into domains); ``nuclei`` is
+an optional nuclear-stain channel used by the nuclei-guided mode for
+candidate object centers.
 """
 
 from dataclasses import dataclass, field
@@ -13,8 +16,8 @@ import numpy as np
 
 @dataclass
 class ImageData:
-    gfap: np.ndarray              # 2D uint16
-    dapi: Optional[np.ndarray]    # 2D uint16, or None for single-channel input
+    signal: np.ndarray            # 2D, immunolabel-of-interest channel
+    nuclei: Optional[np.ndarray]  # 2D, optional nuclei-stain channel
     tissue_mask: np.ndarray       # 2D bool
     pixel_size_um: float
     source_path: Path
@@ -28,13 +31,13 @@ class NucleiResult:
 
 
 @dataclass
-class AstrocyteSeedsResult:
+class SeedsResult:
     kept_indices: np.ndarray      # indices into NucleiResult.centroids
-    scores: np.ndarray            # (N,) score for ALL nuclei (for the histogram)
+    scores: np.ndarray            # (N,) score for ALL candidates (for the histogram)
     params: dict
 
 
 @dataclass
 class TessellationResult:
-    territory_labels: np.ndarray  # 2D int32; label k corresponds to kept_indices[k-1]
+    domain_labels: np.ndarray     # 2D int32; label k corresponds to kept_indices[k-1]
     params: dict

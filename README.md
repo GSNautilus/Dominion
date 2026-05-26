@@ -2,76 +2,81 @@
 
 **DOM**ain **I**dentification for **N**etworks of **I**mmunolabeled **O**bject **N**eighborhoods.
 
-A napari-based workflow for quantitatively segmenting and tessellating astrocyte
-domains from 2D GFAP+DAPI immunofluorescence images.
+A napari-based workflow for quantitatively partitioning tissue into per-object
+domains from 2D immunofluorescence images.
 
-![Dominion in GFAP-only mode: 462 astrocyte seeds, 462 tessellated territories overlaid on a tissue section.](docs/gfap_mode_tessellation.png)
+![Dominion in signal mode: an immunolabeled tissue section partitioned into per-object domains via signal-guided watershed tessellation.](docs/gfap_mode_tessellation.png)
 
-*Dominion in `--mode gfap` on a tissue section. Right: GFAP seed-finding and
-tessellation submenus. Center: the napari viewer showing watershed territories
-(one color per cell) overlaid on the GFAP signal; here, 462 detected peaks
-became 462 astrocyte territories.*
+*Dominion in `--mode signal` on an immunolabeled tissue section. Right: signal
+seed-finding and tessellation submenus. Center: the napari viewer showing
+watershed domains (one color per object) overlaid on the signal channel; here
+462 detected peaks became 462 object domains.*
 
 ## What it does
 
-Given a two-channel fluorescence image — GFAP (astrocyte intermediate filaments)
-and DAPI (nuclei) — Dominion produces a per-cell partition of tissue space that
-approximates each astrocyte's territorial domain. Downstream you can:
+Given an immunofluorescence image where one channel labels the objects of
+interest (cells with intermediate-filament markers, membrane markers,
+cytoplasmic markers, etc.), Dominion partitions the tissue into a per-object
+domain mask. Downstream you can:
 
-- count astrocytes per region,
-- assign per-cell intensities for any additional channel,
-- extract per-cell morphology metrics,
-- describe neighbor relationships between cells.
+- count objects per region,
+- assign per-object intensities for any additional channel,
+- extract per-object morphology metrics,
+- describe neighbor relationships between objects.
 
-The core idea is **tessellation**: astrocytes tile space with limited overlap,
-but their full territories aren't visible in any single channel (GFAP labels only
-~15% of an astrocyte's actual volume — the intermediate filaments — missing the
-peripheral processes that make up most of the cell). Direct segmentation of GFAP
-massively under-estimates territories. Tessellating the tissue mask from
-identified astrocyte centers, using GFAP intensity as boundary evidence, is a
-more honest approximation.
+The core idea is **tessellation**: many cell populations tile space with
+limited overlap, but their full territories aren't visible in any single
+immunolabel — most markers light up only the soma + main processes and miss
+the fine peripheral structures that make up most of the cell. Direct
+segmentation of the signal massively under-estimates territory. Tessellating
+the tissue mask from identified object centers, using the signal intensity as
+boundary evidence, is a more honest approximation.
+
+Originally developed for astrocyte-domain analysis from GFAP + DAPI, but the
+pipeline is signal-agnostic: any channel that brightens *at* the objects you
+care about (and dims between them) is a valid input.
 
 ## Two pipeline modes
 
 Dominion ships with two pipelines that share a tessellation step.
 
-### `--mode gfap` (default): two-stage pipeline
+### `--mode signal` (default): two-stage pipeline
 
 ```
-[GFAP] -> find peaks directly -> seeded watershed on GFAP
+[signal] -> find object centers directly -> seeded watershed on signal
 ```
 
-1. **GFAP seed-finding** — either local-maxima of smoothed GFAP, or peaks of
-   the distance transform of thresholded GFAP. Each peak is taken as an
-   astrocyte center.
-2. **Tessellation** — GFAP-guided seeded watershed within the tissue mask,
-   one territory per kept seed.
+1. **Signal seed-finding** — either local-maxima of the smoothed signal, or
+   peaks of the distance transform of the thresholded signal. Each peak is
+   taken as an object center.
+2. **Tessellation** — signal-guided seeded watershed within the tissue mask,
+   one domain per kept seed.
 
-This is the default because GFAP carries the astrocyte-specific signal directly
-and DAPI is rarely a clean source of astrocyte identity. Fewer parameters,
-more direct biological interpretation. Accepts either single-channel GFAP TIFFs
-or 2-channel CYX TIFFs (the DAPI channel is just ignored in this mode).
+This is the default because the signal channel carries the object-specific
+information directly. Fewer parameters, more direct biological interpretation.
+Accepts either single-channel signal TIFFs or 2-channel CYX TIFFs (the
+nuclei channel is just ignored in this mode).
 
-Won't necessarily catch every astrocyte — especially reactive astrocytes with
-diffuse GFAP and no clear soma peak. The distance-transform method is more
-robust to this than local-maxima.
+Won't necessarily catch every object — anything with diffuse signal and no
+clear soma peak gets under-counted. The distance-transform method is more
+robust to that than local-maxima.
 
-### `--mode dapi`: three-stage pipeline
+### `--mode nuclei`: three-stage pipeline
 
 ```
-[DAPI] -> StarDist nuclei -> filter by GFAP context -> seeded watershed on GFAP
+[nuclei] -> StarDist segmentation -> filter by signal context -> seeded watershed on signal
 ```
 
 1. **Nuclei segmentation** — StarDist's `2D_versatile_fluo` model segments
-   every nucleus in DAPI.
-2. **Astrocyte classification** — for each nucleus, compute a score from the
-   surrounding GFAP (intensity within a disc, weighted by distance from the
-   centroid). Threshold the score to select astrocyte seeds.
-3. **Tessellation** — same as gfap mode.
+   every nucleus in the nuclei channel.
+2. **Object classification** — for each nucleus, compute a score from the
+   surrounding signal (intensity within a disc, weighted by distance from the
+   centroid). Threshold the score to select object seeds.
+3. **Tessellation** — same as signal mode.
 
-Best when DAPI is clean and you want per-nucleus tracking through the pipeline.
-The classification step does the work of filtering non-astrocyte nuclei.
-Requires a 2-channel CYX TIFF (GFAP=channel 0, DAPI=channel 1).
+Best when the nuclei channel reliably identifies your objects (rarely the
+case in mixed-population tissue) and you want per-nucleus tracking through
+the pipeline. Requires a 2-channel CYX TIFF (signal=channel 0, nuclei=channel 1).
 
 ## Installation
 
@@ -99,31 +104,31 @@ pip install -e . --no-deps
 ```
 
 CPU-only is supported (skip the conda TF step and install regular `tensorflow`),
-but inference on multi-megapixel images is then minutes, not seconds.
-
-For CPU-only or non-Windows setups, regular `pip install tensorflow` works; you
-just won't get GPU acceleration on Windows native.
+but StarDist inference on multi-megapixel images is then minutes, not seconds.
+Signal mode doesn't need TensorFlow at all and is fast on CPU.
 
 ## Usage
 
 ```bash
-python scripts/run_dominion.py path/to/image.tif                # gfap mode (default)
-python scripts/run_dominion.py path/to/image.tif --mode dapi    # dapi mode
+python scripts/run_dominion.py path/to/image.tif                  # signal mode (default)
+python scripts/run_dominion.py path/to/image.tif --mode nuclei    # nuclei-guided mode
 ```
 
 Accepted input formats:
 
-- **Single-channel 2D TIFF** — treated as GFAP. Works in gfap mode only.
-- **2-channel CYX TIFF** — channel 0 = GFAP, channel 1 = DAPI. Works in both modes.
+- **Single-channel 2D TIFF** — treated as the signal channel. Works in signal
+  mode only.
+- **2-channel CYX TIFF** — channel 0 = signal, channel 1 = nuclei. Works in
+  both modes.
 
 Non-tissue pixels are expected to be zero (the tissue mask is derived from the
 non-zero footprint of the available channels). Pre-mask non-tissue before
 loading.
 
-Pixel size is read from the TIFF resolution metadata (ImageJ convention: `unit=µm`,
-`XResolution` in pixels/µm). If missing, the pipeline falls back to 1.0 µm/pixel
-with a warning — fine for tuning but means slider radii in µm don't reflect real
-distance.
+Pixel size is read from the TIFF resolution metadata (ImageJ convention:
+`unit=µm`, `XResolution` in pixels/µm). If missing, the pipeline falls back
+to 1.0 µm/pixel with a warning — fine for tuning but means slider radii in µm
+don't reflect real distance.
 
 ### Working in the napari dock
 
@@ -132,20 +137,19 @@ stages enable when upstream produces a result but don't auto-recompute — you
 explicitly Run each step. This avoids wasting compute when tuning upstream
 sliders.
 
-One exception: in dapi mode, the **θ (seed threshold)** slider in classification
-stays live — moving it instantly re-filters the cached scores. T / R / α
-require a Run click. The gfap mode's **peak strength** slider behaves the same
-way after the first Run.
+One exception: the live re-filter sliders stay reactive — **θ (seed threshold)**
+in nuclei mode's classification step and **peak strength** in signal mode's
+seed-finding step. Both just re-filter cached results and update instantly.
 
 When a stage's parameters change, downstream stages keep their visualization
 (stale, for comparison) but their label warns you to click Run.
 
 ### Adjusting point sizes
 
-The "Astrocyte seeds" layer uses uniform point size, so napari's built-in
-**point size** slider in the layer controls works on all of them at once. The
-size persists through Run / θ tweaks (only resets when you re-run nuclei
-detection with a different number of detections).
+The "Object seeds" layer uses uniform point size, so napari's built-in
+**point size** slider in the layer controls works on all points at once. The
+size persists through Run / θ / peak-strength tweaks (only resets when you
+re-run nuclei detection with a different number of detections).
 
 ## Caching
 
@@ -154,24 +158,24 @@ The hash is the first 8 chars of the image's MD5, so re-running on the same
 file is a cache hit; modifying the file invalidates the cache automatically.
 
 Currently only StarDist nuclei outputs are cached (the only slow recomputation
-in the dapi pipeline). Cache directories are git-ignored via `*.dominion_cache_*/`.
+in the nuclei pipeline). Cache directories are git-ignored via `*.dominion_cache_*/`.
 
 ## Architecture
 
 ```
 src/dominion/
-  types.py                       # ImageData, NucleiResult, AstrocyteSeedsResult,
+  types.py                       # ImageData, NucleiResult, SeedsResult,
                                  # TessellationResult dataclasses
   state.py                       # AppState with subscribe/notify, downstream-clear
   io.py                          # TIFF loading, pixel-size parsing, tissue mask
   cache.py                       # per-image cache directory + npz load/save
-  seedfind.py                    # pure GFAP-only seed-finding algorithms
-  app.py                         # build_dock_widget(state, viewer, mode='dapi')
+  seedfind.py                    # pure signal-only seed-finding algorithms
+  app.py                         # build_dock_widget(state, viewer, mode='signal')
   widgets/common.py              # NumericSlider, HistogramSlider, CollapsibleSection
-  submenu1_nuclei.py             # dapi mode stage 1: StarDist nuclei
-  submenu2_seeds.py              # dapi mode stage 2: GFAP-based classification
-  submenu3_tessellation.py       # both modes: GFAP-guided watershed
-  submenu_a_gfap_seeds.py        # gfap mode stage 1: direct peak-finding
+  submenu1_nuclei.py             # nuclei mode stage 1: StarDist nuclei
+  submenu2_seeds.py              # nuclei mode stage 2: signal-based classification
+  submenu3_tessellation.py       # both modes: signal-guided watershed
+  submenu_a_signal_seeds.py      # signal mode stage 1: direct peak-finding
 scripts/
   run_dominion.py                # CLI entry: loads image, builds app, runs napari
 ```
@@ -179,40 +183,40 @@ scripts/
 State flows along a fixed chain: `image → nuclei → seeds → tessellation`.
 Setting any slot clears all downstream slots and notifies subscribers. Submenus
 subscribe to the slot they consume; downstream submenus re-enable but don't
-auto-recompute. The chain is identical in both modes — gfap mode just populates
-`nuclei` with synthetic centroids (the peak coordinates) and `seeds` with all
-indices kept.
+auto-recompute. The chain is identical in both modes — signal mode just
+populates `nuclei` with synthetic centroids (the peak coordinates) and
+`seeds` with all indices kept.
 
 `app.build_dock_widget(state, viewer, mode=...)` is the future-plugin entry
 point. The CLI script (`scripts/run_dominion.py`) is the only filesystem
-consumer; everything else takes pre-loaded `ImageData` via `AppState`. A future
-napari plugin would call `build_dock_widget` directly.
+consumer; everything else takes pre-loaded `ImageData` via `AppState`. A
+future napari plugin would call `build_dock_widget` directly.
 
 ## Limitations / what's not in this version
 
 - **2D only.** Z-stacks are not handled; results from a single z-plane are
-  cross-sections through 3D astrocyte domains, not full domains.
+  cross-sections through 3D object domains, not full domains.
 - **No ground-truth validation.** No sparse-label or hand-annotated comparison
-  is built in. Quality is judged by visual inspection of the napari overlay and
-  internal sanity checks (territory count, sizes, no leakage outside tissue).
+  is built in. Quality is judged by visual inspection of the napari overlay
+  and internal sanity checks (domain count, sizes, no leakage outside tissue).
 - **No batch mode.** One image per invocation; parameters must be tuned in the
   GUI per image. Saving and reloading slider state is a logical next step but
   not implemented.
 - **No quantitative export yet.** The pipeline produces `state.tessellation`
-  with per-cell territory labels, but no CSV/feature table of per-territory
-  metrics is written to disk. Easy to add — `regionprops_table` on the territory
-  mask gets you area, centroid, intensity stats per cell.
-- **StarDist needs sensible nucleus scale.** Native model expects nuclei of
-  ~10–30 px diameter. If your image's pixel size leaves nuclei at ~3 px
-  (typical for low-mag tissue overviews), upscale before loading or accept
-  noisier nuclei segmentation.
-- **TF 2.10 on Windows is frozen at 2022.** GPU StarDist on native Windows uses
-  the last TF version with Windows CUDA support. For new TF features or active
-  maintenance, run inside WSL2 with current TF.
-- **Reactive astrocytes.** GFAP hypertrophy in injury models confounds both
-  classification (in dapi mode) and seed-finding (in gfap mode). Local-maxima
-  in gfap mode is particularly affected — diffuse GFAP without a clear soma
-  peak gets under-counted. The distance-transform method is more robust to this.
+  with per-object domain labels, but no CSV/feature table of per-domain
+  metrics is written to disk. Easy to add — `regionprops_table` on the domain
+  mask gets you area, centroid, intensity stats per object.
+- **StarDist needs sensible nucleus scale (nuclei mode only).** Native model
+  expects nuclei of ~10–30 px diameter. If your image's pixel size leaves
+  nuclei at ~3 px (typical for low-mag tissue overviews), upscale before
+  loading or accept noisier nuclei segmentation.
+- **TF 2.10 on Windows is frozen at 2022.** GPU StarDist on native Windows
+  uses the last TF version with Windows CUDA support. For new TF features or
+  active maintenance, run inside WSL2 with current TF.
+- **Diffuse signal misses objects.** Local-maxima seed-finding fails on cells
+  whose signal is broad and lacks a clear peak (e.g. reactive astrocytes in
+  injury models). The distance-transform method is more robust but still
+  threshold-dependent.
 
 ## License
 

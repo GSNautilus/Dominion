@@ -2,7 +2,7 @@
 
 Provides a small Qt panel (two threshold sliders + a Run button + a
 status label) that, on Run, executes the pretrained StarDist
-``2D_versatile_fluo`` model on the loaded DAPI channel. Results are
+``2D_versatile_fluo`` model on the loaded nuclei channel. Results are
 cached to disk keyed on (image, params) and stored back into the shared
 :class:`AppState` so downstream submenus can consume them. Heavy work
 runs on a :func:`napari.qt.thread_worker` to keep the UI responsive.
@@ -40,9 +40,9 @@ def _auto_n_tiles(shape: tuple[int, int], target_tile_px: int = 2000) -> tuple[i
 
 
 def _run_stardist(
-    dapi: np.ndarray, prob_thresh: float, nms_thresh: float
+    nuclei: np.ndarray, prob_thresh: float, nms_thresh: float
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
-    """Run pretrained StarDist on a 2D DAPI image.
+    """Run pretrained StarDist on a 2D nuclei-channel image.
 
     Returns ``(label_mask, centroids, n_tiles)`` where ``label_mask`` is
     int32, ``centroids`` is an (N, 2) float array of ``(row, col)`` pixel
@@ -55,7 +55,7 @@ def _run_stardist(
     from stardist.models import StarDist2D
 
     model = StarDist2D.from_pretrained("2D_versatile_fluo")
-    normalized = normalize(dapi, 1, 99.8, axis=(0, 1))
+    normalized = normalize(nuclei, 1, 99.8, axis=(0, 1))
     n_tiles = _auto_n_tiles(normalized.shape)
     labels, _details = model.predict_instances(
         normalized,
@@ -217,8 +217,10 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         if image is None:
             _set_status("No image loaded")
             return
-        if image.dapi is None:
-            _set_status("No DAPI channel — load a CYX TIFF or use --mode gfap")
+        if image.nuclei is None:
+            _set_status(
+                "No nuclei channel — load a CYX TIFF or use --mode signal"
+            )
             return
 
         prob_thresh = float(prob_slider.value())
@@ -243,7 +245,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         # Slow path: actually run StarDist on a worker thread so the GUI
         # stays responsive.
         run_button.setEnabled(False)
-        n_tiles = _auto_n_tiles(image.dapi.shape)
+        n_tiles = _auto_n_tiles(image.nuclei.shape)
         if n_tiles == (1, 1):
             _set_status("Running...")
         else:
@@ -251,11 +253,11 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
         from napari.qt import thread_worker
 
-        dapi = image.dapi
+        nuclei_arr = image.nuclei
 
         @thread_worker
         def _job():
-            return _run_stardist(dapi, prob_thresh, nms_thresh)
+            return _run_stardist(nuclei_arr, prob_thresh, nms_thresh)
 
         worker = _job()
 

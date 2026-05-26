@@ -1,6 +1,7 @@
 """Image loading for Dominion.
 
-Reads 2-channel CYX uint16 TIFFs (channel 0 = GFAP, channel 1 = DAPI) and
+Reads 2D single-channel TIFFs (treated as the signal channel) or
+2-channel CYX TIFFs (channel 0 = signal, channel 1 = nuclei) and
 extracts the µm/pixel scale from the TIFF resolution metadata.
 """
 
@@ -45,10 +46,11 @@ def _parse_unit_from_description(description: str | None) -> str | None:
 def load_image(path: Path) -> ImageData:
     """Load a TIFF and return an :class:`ImageData`.
 
-    Accepts either a 2D single-channel image (treated as GFAP, with DAPI
-    set to ``None``) or a 3D CYX stack where channel 0 is GFAP and
-    channel 1 is DAPI. Single-channel input works with ``--mode gfap``;
-    ``--mode dapi`` requires both channels.
+    Accepts either a 2D single-channel image (treated as the signal
+    channel, with nuclei set to ``None``) or a 3D CYX stack where
+    channel 0 is the signal channel and channel 1 is the nuclei channel.
+    Single-channel input works with ``--mode signal``; ``--mode nuclei``
+    requires both channels.
 
     Pixel size is parsed from the TIFF ``XResolution`` tag using the
     convention ``pixels_per_um = num/den`` (i.e. ImageJ writes resolution
@@ -65,11 +67,11 @@ def load_image(path: Path) -> ImageData:
         description = desc_tag.value if desc_tag is not None else None
 
     if arr.ndim == 2:
-        gfap = arr
-        dapi = None
+        signal = arr
+        nuclei = None
     elif arr.ndim == 3 and arr.shape[0] >= 1:
-        gfap = arr[0]
-        dapi = arr[1] if arr.shape[0] >= 2 else None
+        signal = arr[0]
+        nuclei = arr[1] if arr.shape[0] >= 2 else None
     else:
         raise ValueError(
             f"Expected a 2D single-channel TIFF or a 3D CYX TIFF, "
@@ -109,11 +111,13 @@ def load_image(path: Path) -> ImageData:
             else:
                 pixel_size_um = 1.0 / pixels_per_um
 
-    tissue_mask = (gfap > 0) if dapi is None else ((gfap > 0) | (dapi > 0))
+    tissue_mask = (
+        (signal > 0) if nuclei is None else ((signal > 0) | (nuclei > 0))
+    )
 
     return ImageData(
-        gfap=gfap,
-        dapi=dapi,
+        signal=signal,
+        nuclei=nuclei,
         tissue_mask=tissue_mask,
         pixel_size_um=pixel_size_um,
         source_path=path,

@@ -1,23 +1,23 @@
-"""GFAP-only seed-finding algorithms.
+"""Signal-based seed-finding algorithms.
 
-Two algorithms for identifying astrocyte centers from the GFAP channel
-alone, used by the ``--mode gfap`` pipeline:
+Two algorithms for identifying object centers from a single signal
+channel, used by the ``--mode signal`` pipeline:
 
-* :func:`find_seeds_local_max` — peaks of the (smoothed) GFAP intensity.
-  Each peak is the brightest point of a candidate astrocyte. Fast and
-  intuitive; the natural choice when GFAP somas show clear intensity
-  peaks.
-* :func:`find_seeds_dist_transform_peaks` — threshold GFAP, compute the
-  distance transform of the resulting mask, find peaks. Each peak is the
-  geometric "deepest interior" of a GFAP-bright region. More robust to
-  intensity heterogeneity within a soma, but requires a threshold step.
+* :func:`find_seeds_local_max` — peaks of the (smoothed) signal intensity.
+  Each peak is the brightest point of a candidate object. Fast and
+  intuitive; the natural choice when objects show clear intensity peaks.
+* :func:`find_seeds_dist_transform_peaks` — threshold the signal, compute
+  the distance transform of the resulting mask, find peaks. Each peak is
+  the geometric "deepest interior" of a signal-bright region. More
+  robust to intensity heterogeneity within an object, but requires a
+  threshold step.
 
 Both return ``(peaks, peak_values)`` where ``peaks`` is an (N, 2) float
 array of ``(row, col)`` pixel coords and ``peak_values`` is an (N,)
-array of the per-peak score: smoothed-GFAP intensity for local-max,
+array of the per-peak score: smoothed signal intensity for local-max,
 distance-from-background for dist-transform.
 
-Pure functions — no UI, no AppState. Imported by both the GFAP-seeds
+Pure functions — no UI, no AppState. Imported by both the signal-seeds
 submenu and any future tests.
 """
 
@@ -29,31 +29,31 @@ from skimage.feature import peak_local_max
 from skimage.filters import gaussian
 
 
-def _smooth(gfap: np.ndarray, sigma_px: float) -> np.ndarray:
-    """Gaussian-smooth GFAP, returning float32. No-op for sigma <= 0."""
-    g = gfap.astype(np.float32, copy=False)
+def _smooth(signal: np.ndarray, sigma_px: float) -> np.ndarray:
+    """Gaussian-smooth the signal, returning float32. No-op for sigma <= 0."""
+    s = signal.astype(np.float32, copy=False)
     if sigma_px <= 0:
-        return g
-    return gaussian(g, sigma=float(sigma_px), preserve_range=True).astype(
+        return s
+    return gaussian(s, sigma=float(sigma_px), preserve_range=True).astype(
         np.float32, copy=False
     )
 
 
 def find_seeds_local_max(
-    gfap: np.ndarray,
+    signal: np.ndarray,
     tissue_mask: np.ndarray,
     *,
     sigma_px: float,
     threshold_abs: float,
     min_distance_px: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Smooth GFAP, then find local maxima above ``threshold_abs`` with
+    """Smooth the signal, then find local maxima above ``threshold_abs`` with
     minimum spacing ``min_distance_px``, restricted to the tissue mask.
 
     Returns ``(peaks, peak_values)`` where ``peak_values`` is the smoothed
-    GFAP intensity at each peak.
+    signal intensity at each peak.
     """
-    smoothed = _smooth(gfap, sigma_px)
+    smoothed = _smooth(signal, sigma_px)
     # Zero out pixels outside tissue so they can't pass threshold_abs.
     image = np.where(tissue_mask, smoothed, np.float32(0.0))
     coords = peak_local_max(
@@ -68,22 +68,22 @@ def find_seeds_local_max(
 
 
 def find_seeds_dist_transform_peaks(
-    gfap: np.ndarray,
+    signal: np.ndarray,
     tissue_mask: np.ndarray,
     *,
     sigma_px: float,
     threshold_abs: float,
     min_distance_px: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Threshold (smoothed) GFAP at ``threshold_abs``, distance-transform
+    """Threshold the (smoothed) signal at ``threshold_abs``, distance-transform
     the resulting mask, then find peaks of the distance map.
 
-    Peaks are the most-interior points of each connected GFAP-bright
+    Peaks are the most-interior points of each connected signal-bright
     region. ``peak_values`` is the distance (in pixels) from the peak to
     the nearest background pixel — a rough "radius" of the region around
-    each cell.
+    each object.
     """
-    smoothed = _smooth(gfap, sigma_px)
+    smoothed = _smooth(signal, sigma_px)
     fg = (smoothed >= float(threshold_abs)) & tissue_mask
     if not fg.any():
         return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=np.float32)

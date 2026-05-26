@@ -25,16 +25,20 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "image_path",
         type=Path,
-        help="Path to a CYX uint16 TIFF (c1=GFAP, c2=DAPI).",
+        help=(
+            "Path to a 2D single-channel TIFF (treated as the signal channel) "
+            "or a 2-channel CYX TIFF (c0=signal, c1=nuclei)."
+        ),
     )
     parser.add_argument(
         "--mode",
         choices=MODES,
-        default="gfap",
+        default="signal",
         help=(
-            "Pipeline variant: 'gfap' (default) uses the GFAP-only seed-finding "
-            "+ tessellation flow; 'dapi' uses the StarDist+classification + "
-            "tessellation flow (requires a CYX TIFF with a DAPI channel)."
+            "Pipeline variant: 'signal' (default) finds object seeds directly "
+            "from the signal channel; 'nuclei' uses StarDist on the nuclei "
+            "channel + signal-based classification (requires a CYX TIFF with "
+            "both channels)."
         ),
     )
     args = parser.parse_args(argv)
@@ -49,20 +53,20 @@ def main(argv: list[str] | None = None) -> None:
     scale = (image.pixel_size_um, image.pixel_size_um)
 
     viewer.add_image(
-        image.gfap,
-        name="GFAP",
+        image.signal,
+        name="Signal",
         colormap="green",
         blending="additive",
-        contrast_limits=_auto_contrast_limits(image.gfap),
+        contrast_limits=_auto_contrast_limits(image.signal),
         scale=scale,
     )
-    if image.dapi is not None:
+    if image.nuclei is not None:
         viewer.add_image(
-            image.dapi,
-            name="DAPI",
+            image.nuclei,
+            name="Nuclei",
             colormap="blue",
             blending="additive",
-            contrast_limits=_auto_contrast_limits(image.dapi),
+            contrast_limits=_auto_contrast_limits(image.nuclei),
             scale=scale,
         )
 

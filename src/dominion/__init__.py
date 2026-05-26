@@ -1,3 +1,6 @@
-"""Dominion: tessellation of astrocyte domains from 2D GFAP+DAPI IF images."""
+"""Dominion: tessellation of object domains from 2D immunofluorescence images.
+
+DOMain Identification for Networks of Immunolabeled Object Neighborhoods.
+"""
 
 __version__ = "0.1.0"
