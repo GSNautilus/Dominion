@@ -1,13 +1,13 @@
-# Dominion
+# DOMINION
 
 **DOM**ain **I**dentification for **N**etworks of **I**mmunolabeled **O**bject **N**eighborhoods.
 
 A napari-based workflow for quantitatively partitioning tissue into per-object
 domains from 2D immunofluorescence images.
 
-![Dominion in signal mode: an immunolabeled tissue section partitioned into per-object domains via signal-guided watershed tessellation.](docs/gfap_mode_tessellation.png)
+![DOMINION in signal mode: an immunolabeled tissue section partitioned into per-object domains via signal-guided watershed tessellation.](docs/gfap_mode_tessellation.png)
 
-*Dominion in `--mode signal` on an immunolabeled tissue section. Right: signal
+*DOMINION in `--mode signal` on an immunolabeled tissue section. Right: signal
 seed-finding and tessellation submenus. Center: the napari viewer showing
 watershed domains (one color per object) overlaid on the signal channel; here
 462 detected peaks became 462 object domains.*
@@ -16,7 +16,7 @@ watershed domains (one color per object) overlaid on the signal channel; here
 
 Given an immunofluorescence image where one channel labels the objects of
 interest (cells with intermediate-filament markers, membrane markers,
-cytoplasmic markers, etc.), Dominion partitions the tissue into a per-object
+cytoplasmic markers, etc.), DOMINION partitions the tissue into a per-object
 domain mask. Downstream you can:
 
 - count objects per region,
@@ -38,7 +38,7 @@ care about (and dims between them) is a valid input.
 
 ## Two pipeline modes
 
-Dominion ships with two pipelines that share a tessellation step.
+DOMINION ships with two pipelines that share a tessellation step.
 
 ### `--mode signal` (default): two-stage pipeline
 
@@ -97,7 +97,7 @@ pip install stardist csbdeep scikit-image tifffile "napari[all]" pyqtgraph magic
 pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip
 pip install PyQt5
 
-# Install Dominion itself (editable)
+# Install DOMINION itself (editable)
 git clone https://github.com/GSNautilus/Dominion.git
 cd Dominion
 pip install -e . --no-deps

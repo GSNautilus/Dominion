@@ -1,4 +1,4 @@
-"""Shared dataclasses for the Dominion pipeline.
+"""Shared dataclasses for the DOMINION pipeline.
 
 The pipeline is signal-agnostic: ``signal`` is the immunolabel-of-interest
 channel (intermediate-filament markers, membrane markers, anything that

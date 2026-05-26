@@ -1,4 +1,4 @@
-"""Shared Qt widgets used across the Dominion submenus.
+"""Shared Qt widgets used across the DOMINION submenus.
 
 These are intentionally napari-agnostic and can be exercised in a plain
 ``QApplication`` for tests.

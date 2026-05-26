@@ -1,4 +1,4 @@
-"""Image loading for Dominion.
+"""Image loading for DOMINION.
 
 Reads 2D single-channel TIFFs (treated as the signal channel) or
 2-channel CYX TIFFs (channel 0 = signal, channel 1 = nuclei) and

@@ -1,4 +1,4 @@
-"""Dock widget composition for the Dominion napari workflow.
+"""Dock widget composition for the DOMINION napari workflow.
 
 The :func:`build_dock_widget` function is the future-plugin entry point:
 it consumes an :class:`AppState` and a napari ``Viewer`` and returns the
@@ -35,7 +35,7 @@ def _build_header() -> QWidget:
     layout.setContentsMargins(6, 4, 6, 6)
     layout.setSpacing(2)
 
-    title = QLabel("Dominion")
+    title = QLabel("DOMINION")
     title.setStyleSheet("font-size: 14pt; font-weight: bold;")
     title.setAlignment(Qt.AlignLeft)
 

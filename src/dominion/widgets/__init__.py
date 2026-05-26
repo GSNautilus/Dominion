@@ -1,4 +1,4 @@
-"""Reusable Qt widgets for Dominion submenus."""
+"""Reusable Qt widgets for DOMINION submenus."""
 
 from .common import CollapsibleSection, HistogramSlider, NumericSlider
 
