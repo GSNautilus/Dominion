@@ -22,7 +22,7 @@ from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 from .skeletonize import skeletonize_domains
 from .state import AppState
 from .types import SkeletonsResult
-from .widgets.common import CollapsibleSection, HistogramSlider
+from .widgets.common import CollapsibleSection, HistogramSlider, NumericSlider
 
 if TYPE_CHECKING:
     import napari  # noqa: F401
@@ -71,6 +71,11 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     signal_trace_slider = HistogramSlider(
         "Min signal for tracing", 0.0, 1.0, step=1.0, value=0.0, decimals=1
     )
+    # Twig pruning: iteratively remove endpoint-terminated branches shorter
+    # than this threshold. 0 = no pruning (raw skeletonize output).
+    min_branch_slider = NumericSlider(
+        "Min branch length (µm)", 0.0, 20.0, step=0.1, value=0.0, decimals=1
+    )
 
     run_button = QPushButton("Run skeletonization")
     summary_label = QLabel("No tessellation yet.")
@@ -78,6 +83,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     summary_label.setWordWrap(True)
 
     layout.addWidget(signal_trace_slider)
+    layout.addWidget(min_branch_slider)
     layout.addWidget(run_button)
     layout.addWidget(summary_label)
     section.set_content(content)
@@ -126,6 +132,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             return
 
         signal_threshold = float(signal_trace_slider.value())
+        min_branch_length_um = float(min_branch_slider.value())
         run_button.setEnabled(False)
         summary_label.setText("Running skeletonization...")
         try:
@@ -135,6 +142,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 state.image.pixel_size_um,
                 signal=state.image.signal if signal_threshold > 0 else None,
                 signal_threshold=signal_threshold,
+                min_branch_length_um=min_branch_length_um,
             )
         finally:
             run_button.setEnabled(True)
@@ -144,7 +152,10 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             SkeletonsResult(
                 per_domain=per_domain,
                 skeleton_label_image=skel_label_image,
-                params={"signal_threshold": signal_threshold},
+                params={
+                    "signal_threshold": signal_threshold,
+                    "min_branch_length_um": min_branch_length_um,
+                },
             ),
         )
 
