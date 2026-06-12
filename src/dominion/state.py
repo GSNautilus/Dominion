@@ -23,6 +23,7 @@ from .types import (
     MeasurementsResult,
     NucleiResult,
     SeedsResult,
+    SholResult,
     SkeletonsResult,
     TessellationResult,
 )
@@ -35,6 +36,7 @@ _SLOT_TYPES = {
     "tessellation": TessellationResult,
     "measurements": MeasurementsResult,
     "skeletons": SkeletonsResult,
+    "sholl": SholResult,
 }
 
 _DOWNSTREAM: dict[str, list[str]] = {
@@ -43,7 +45,8 @@ _DOWNSTREAM: dict[str, list[str]] = {
     "seeds": ["tessellation"],
     "tessellation": ["measurements", "skeletons"],
     "measurements": [],
-    "skeletons": [],
+    "skeletons": ["sholl"],
+    "sholl": [],
 }
 
 
@@ -72,6 +75,7 @@ class AppState:
         self.tessellation: Optional[TessellationResult] = None
         self.measurements: Optional[MeasurementsResult] = None
         self.skeletons: Optional[SkeletonsResult] = None
+        self.sholl: Optional[SholResult] = None
         self._subscribers: dict[str, list[Callable[[], None]]] = {
             slot: [] for slot in _SLOT_TYPES
         }

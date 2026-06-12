@@ -77,6 +77,26 @@ class SkeletonsResult:
 
 
 @dataclass
+class SholResult:
+    """Per-cell Sholl analysis derived from a SkeletonsResult.
+
+    For each cell present in ``per_domain``:
+
+    * ``radii_um`` — (R,) float, ring center radii in microns
+      (``ring_spacing, 2*ring_spacing, ...``) up to ``max_radius_um``.
+    * ``intersections`` — (R,) int32, number of skeleton-branch crossings
+      at each radius (connected components of the skeleton within the
+      annular ring, NOT raw pixel counts).
+    * Scalar derived metrics: ``peak_intersections``, ``peak_radius_um``,
+      ``max_radius_um``, ``critical_radius_um``, ``auc``,
+      ``ramification_index``.
+    """
+
+    per_domain: dict[int, dict]   # {domain_id: {radii_um, intersections, peak_*, ...}}
+    params: dict                  # {"ring_spacing_um": float}
+
+
+@dataclass
 class MeasurementsResult:
     """Per-domain measurements across one or more channels.
 
