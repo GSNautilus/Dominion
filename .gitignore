@@ -50,6 +50,12 @@ outputs/
 
 # DOMINION per-image caches (StarDist outputs, etc.)
 *.dominion_cache_*/
+
+# DOMINION per-image CSV exports (per-domain table + summary)
+*_domains.csv
+*_domains_summary.csv
+!docs/**/*_domains.csv
+!docs/**/*_domains_summary.csv
 *.tif
 *.tiff
 *.czi
