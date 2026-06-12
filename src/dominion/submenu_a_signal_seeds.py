@@ -43,7 +43,12 @@ if TYPE_CHECKING:
 
 
 _SEEDS_LAYER_NAME = "Object seeds"
-_DEFAULT_SIZE_FACTOR = 6.0  # matches submenu 2 so napari UI behaves the same
+# Default size in data units (pixels). The previous "6 * pixel_size_um"
+# formula gave wildly different defaults across image resolutions —
+# ~15 on 2.57 µm/px tile-scan images, ~1 on 0.17 µm/px high-mag images.
+# Using a fixed value keeps the napari UI's "point size" slider showing
+# a sensible default (24) regardless of image resolution.
+_DEFAULT_POINT_SIZE = 24.0
 
 _METHOD_LOCAL_MAX = "Local maxima of smoothed signal"
 _METHOD_DIST_PEAKS = "Distance-transform peaks of thresholded signal"
@@ -129,7 +134,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 peaks,
                 name=_SEEDS_LAYER_NAME,
                 face_color=[1.0, 1.0, 0.0, 1.0],  # scalar yellow
-                size=_DEFAULT_SIZE_FACTOR * pixel_size_um,
+                size=_DEFAULT_POINT_SIZE,
                 scale=(pixel_size_um, pixel_size_um),
                 border_color="transparent",
             )
@@ -141,9 +146,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             # is robust to any per-point noise napari may have introduced.
             sz_arr = np.asarray(layer.size, dtype=float).ravel()
             target_size = (
-                float(np.median(sz_arr))
-                if sz_arr.size
-                else _DEFAULT_SIZE_FACTOR * pixel_size_um
+                float(np.median(sz_arr)) if sz_arr.size else _DEFAULT_POINT_SIZE
             )
             layer.data = peaks
             layer.size = target_size
