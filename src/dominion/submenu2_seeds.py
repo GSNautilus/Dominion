@@ -40,8 +40,9 @@ _SEEDS_LAYER_NAME = "Object seeds"
 # napari's built-in "point size" UI slider can control all of them. After
 # creation we never re-assign `layer.size`, so user resizing via the UI
 # persists across Run / theta updates (until N changes, which forces a
-# fresh layer).
-_DEFAULT_SIZE_FACTOR = 6.0
+# fresh layer). Fixed value (data units / pixels) so it doesn't shrink to
+# invisibly small on high-resolution images.
+_DEFAULT_POINT_SIZE = 24.0
 
 
 def _compute_scores(
@@ -162,7 +163,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 centroids,
                 name=_SEEDS_LAYER_NAME,
                 face_color=face,
-                size=_DEFAULT_SIZE_FACTOR * pixel_size_um,
+                size=_DEFAULT_POINT_SIZE,
                 scale=(pixel_size_um, pixel_size_um),
                 border_color="transparent",
             )
