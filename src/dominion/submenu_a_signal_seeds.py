@@ -336,6 +336,45 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     run_button.clicked.connect(_on_run_clicked)
     state.subscribe("image", _on_image_changed)
 
+    # --- Settings round-trip ---
+    def _get_settings() -> dict:
+        return {
+            "method": method_combo.currentText(),
+            "sigma_um": float(sigma_slider.value()),
+            "signal_threshold": float(threshold_slider.value()),
+            "min_distance_um": float(min_dist_slider.value()),
+            "peak_strength": float(peak_strength_slider.value()),
+        }
+
+    def _set_widened(slider, value: float) -> None:
+        """Set a slider's value, widening its range first if the saved
+        value would otherwise be silently clamped (e.g. peak_strength
+        before any Run has reconfigured its range from real peak data)."""
+        slider.set_value(value)
+        if abs(slider.value() - value) > 1e-6:
+            slider.set_range(0.0, max(value * 1.2, 1.0), step=max(value / 1000, 1e-6))
+            slider.set_value(value)
+
+    def _apply_settings(s: dict) -> None:
+        suppress["on"] = True
+        try:
+            if "method" in s:
+                idx = method_combo.findText(str(s["method"]))
+                if idx >= 0:
+                    method_combo.setCurrentIndex(idx)
+            if "sigma_um" in s:
+                sigma_slider.set_value(float(s["sigma_um"]))
+            if "signal_threshold" in s:
+                _set_widened(threshold_slider, float(s["signal_threshold"]))
+            if "min_distance_um" in s:
+                min_dist_slider.set_value(float(s["min_distance_um"]))
+            if "peak_strength" in s:
+                _set_widened(peak_strength_slider, float(s["peak_strength"]))
+        finally:
+            suppress["on"] = False
+
+    state.register_settings("signal_seed_finding", _get_settings, _apply_settings)
+
     # Handle the case where image was already set before we subscribed.
     if state.image is not None:
         _on_image_changed()

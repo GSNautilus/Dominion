@@ -347,6 +347,39 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     state.subscribe("seeds", _on_seeds_changed)
     state.subscribe("image", _on_image_changed)
 
+    def _get_settings() -> dict:
+        return {
+            "signal_influence": float(signal_slider.value()),
+            "smoothing_sigma_um": float(sigma_slider.value()),
+            "min_signal": float(min_signal_slider.value()),
+            "min_area_um2": float(min_area_slider.value()),
+            "max_area_um2": float(max_area_slider.value()),
+        }
+
+    def _set_widened(slider, value: float) -> None:
+        slider.set_value(value)
+        if abs(slider.value() - value) > 1e-6:
+            slider.set_range(0.0, max(value * 1.2, 1.0), step=max(value / 1000, 1e-6))
+            slider.set_value(value)
+
+    def _apply_settings(s: dict) -> None:
+        suppress["on"] = True
+        try:
+            if "signal_influence" in s:
+                signal_slider.set_value(float(s["signal_influence"]))
+            if "smoothing_sigma_um" in s:
+                sigma_slider.set_value(float(s["smoothing_sigma_um"]))
+            if "min_signal" in s:
+                _set_widened(min_signal_slider, float(s["min_signal"]))
+            if "min_area_um2" in s:
+                min_area_slider.set_value(float(s["min_area_um2"]))
+            if "max_area_um2" in s:
+                max_area_slider.set_value(float(s["max_area_um2"]))
+        finally:
+            suppress["on"] = False
+
+    state.register_settings("tessellation", _get_settings, _apply_settings)
+
     # Handle the case where image was already set before we subscribed.
     if state.image is not None:
         _on_image_changed()
