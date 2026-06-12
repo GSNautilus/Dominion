@@ -160,27 +160,85 @@ def _render_summary(m: MeasurementsResult) -> str:
     return "\n".join(lines)
 
 
+_SKELETON_COLS = (
+    "skel_total_length_um",
+    "skel_n_branches",
+    "skel_n_endpoints",
+    "skel_n_branchpoints",
+)
+
+_SHOLL_COLS = (
+    "sholl_peak_intersections",
+    "sholl_peak_radius_um",
+    "sholl_max_radius_um",
+    "sholl_critical_radius_um",
+    "sholl_auc",
+    "sholl_ramification_index",
+)
+
+
+def _skel_row(skeletons, did: int) -> list[object]:
+    if skeletons is None:
+        return ["" for _ in _SKELETON_COLS]
+    info = skeletons.per_domain.get(int(did))
+    if info is None:
+        return ["" for _ in _SKELETON_COLS]
+    return [
+        float(info["total_length_um"]),
+        int(info["n_branches"]),
+        int(info["n_endpoints"]),
+        int(info["n_branchpoints"]),
+    ]
+
+
+def _sholl_row(sholl, did: int) -> list[object]:
+    if sholl is None:
+        return ["" for _ in _SHOLL_COLS]
+    info = sholl.per_domain.get(int(did))
+    if info is None:
+        return ["" for _ in _SHOLL_COLS]
+    return [
+        int(info["peak_intersections"]),
+        float(info["peak_radius_um"]),
+        float(info["max_radius_um"]),
+        float(info["critical_radius_um"]),
+        int(info["auc"]),
+        float(info["ramification_index"]),
+    ]
+
+
 def _write_domains_csv(
     path: Path,
     m: MeasurementsResult,
     pixel_size_um: float,
+    skeletons=None,
+    sholl=None,
 ) -> None:
-    """One row per domain. Columns: morphology + (channel_stat) products."""
+    """One row per domain. Columns: morphology + (channel_stat) + optional
+    skeleton + Sholl summary columns when their state slots are set."""
     morph_cols = list(m.morphology.keys())
     channel_stats: list[tuple[str, str]] = []
     for ch in sorted(m.per_channel):
         for stat in sorted(m.per_channel[ch]):
             channel_stats.append((ch, stat))
 
-    header = ["domain_id"] + morph_cols + [f"{ch}_{stat}" for ch, stat in channel_stats]
+    header = (
+        ["domain_id"]
+        + morph_cols
+        + [f"{ch}_{stat}" for ch, stat in channel_stats]
+        + list(_SKELETON_COLS)
+        + list(_SHOLL_COLS)
+    )
 
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(header)
         for i, did in enumerate(m.domain_ids):
-            row = [int(did)]
+            row: list[object] = [int(did)]
             row.extend(float(m.morphology[k][i]) for k in morph_cols)
             row.extend(float(m.per_channel[ch][stat][i]) for ch, stat in channel_stats)
+            row.extend(_skel_row(skeletons, int(did)))
+            row.extend(_sholl_row(sholl, int(did)))
             w.writerow(row)
 
 
@@ -191,6 +249,8 @@ def _write_summary_csv(
     tessellation,
     seeds,
     nuclei,
+    skeletons=None,
+    sholl=None,
 ) -> None:
     """One row per image: population-level stats + provenance / params."""
     rows: list[tuple[str, object]] = []
@@ -224,6 +284,45 @@ def _write_summary_csv(
             rows.append((f"{ch}_mean_intensity_median", float(np.median(means))))
             rows.append((f"{ch}_mean_intensity_mean", float(np.mean(means))))
 
+    if skeletons is not None and skeletons.per_domain:
+        per = skeletons.per_domain
+        totals = np.array([d["total_length_um"] for d in per.values()], dtype=np.float64)
+        branches = np.array([d["n_branches"] for d in per.values()], dtype=np.int32)
+        endpoints = np.array([d["n_endpoints"] for d in per.values()], dtype=np.int32)
+        branchpts = np.array([d["n_branchpoints"] for d in per.values()], dtype=np.int32)
+        rows.append(("n_skeletons", int(len(per))))
+        rows.append(("skel_total_length_median_um", float(np.median(totals))))
+        rows.append(("skel_total_length_mean_um", float(np.mean(totals))))
+        rows.append(("skel_branches_median", float(np.median(branches))))
+        rows.append(("skel_endpoints_median", float(np.median(endpoints))))
+        rows.append(("skel_branchpoints_median", float(np.median(branchpts))))
+
+    if sholl is not None and sholl.per_domain:
+        per = sholl.per_domain
+        peaks = np.array(
+            [d["peak_intersections"] for d in per.values()], dtype=np.int32
+        )
+        peak_radii = np.array(
+            [d["peak_radius_um"] for d in per.values()], dtype=np.float64
+        )
+        max_radii = np.array(
+            [d["max_radius_um"] for d in per.values()], dtype=np.float64
+        )
+        crit_radii = np.array(
+            [d["critical_radius_um"] for d in per.values()], dtype=np.float64
+        )
+        aucs = np.array([d["auc"] for d in per.values()], dtype=np.int32)
+        ramif = np.array(
+            [d["ramification_index"] for d in per.values()], dtype=np.float64
+        )
+        rows.append(("n_sholl", int(len(per))))
+        rows.append(("sholl_peak_intersections_median", float(np.median(peaks))))
+        rows.append(("sholl_peak_radius_median_um", float(np.median(peak_radii))))
+        rows.append(("sholl_max_radius_median_um", float(np.median(max_radii))))
+        rows.append(("sholl_critical_radius_median_um", float(np.median(crit_radii))))
+        rows.append(("sholl_auc_median", float(np.median(aucs))))
+        rows.append(("sholl_ramification_index_median", float(np.median(ramif))))
+
     # Provenance: params from each upstream slot, flattened with a stage prefix.
     def _flatten(prefix: str, params: dict | None):
         if not params:
@@ -237,6 +336,8 @@ def _write_summary_csv(
     _flatten("tessellation", getattr(tessellation, "params", None))
     _flatten("measurements", m.params)
     _flatten("nuclei", getattr(nuclei, "params", None))
+    _flatten("skeletons", getattr(skeletons, "params", None))
+    _flatten("sholl", getattr(sholl, "params", None))
 
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
@@ -365,6 +466,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             domains_path,
             state.measurements,
             state.image.pixel_size_um,
+            skeletons=state.skeletons,
+            sholl=state.sholl,
         )
         _write_summary_csv(
             summary_path,
@@ -373,6 +476,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             state.tessellation,
             state.seeds,
             state.nuclei,
+            skeletons=state.skeletons,
+            sholl=state.sholl,
         )
         summary_label.setText(
             _render_summary(state.measurements)
