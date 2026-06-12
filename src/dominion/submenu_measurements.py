@@ -247,7 +247,7 @@ def _write_summary_csv(
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     """Return the measurements submenu."""
-    section = CollapsibleSection("Measurements")
+    section = CollapsibleSection("Measurements", collapsed=True)
 
     content = QWidget()
     layout = QVBoxLayout(content)

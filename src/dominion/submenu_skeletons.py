@@ -22,7 +22,7 @@ from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 from .skeletonize import skeletonize_domains
 from .state import AppState
 from .types import SkeletonsResult
-from .widgets.common import CollapsibleSection
+from .widgets.common import CollapsibleSection, HistogramSlider
 
 if TYPE_CHECKING:
     import napari  # noqa: F401
@@ -58,22 +58,32 @@ def _seed_positions_from_state(state: AppState) -> dict[int, tuple[float, float]
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     """Return the skeleton-extraction submenu."""
-    section = CollapsibleSection("Skeletons")
+    section = CollapsibleSection("Skeletons", collapsed=True)
 
     content = QWidget()
     layout = QVBoxLayout(content)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(4)
 
+    # Optional signal floor restricts what gets traced inside each
+    # domain. 0 = trace the full domain (default). Higher = trace only
+    # brighter pixels (sparser tracing of soma + main processes).
+    signal_trace_slider = HistogramSlider(
+        "Min signal for tracing", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+    )
+
     run_button = QPushButton("Run skeletonization")
     summary_label = QLabel("No tessellation yet.")
     summary_label.setAlignment(Qt.AlignLeft)
     summary_label.setWordWrap(True)
 
+    layout.addWidget(signal_trace_slider)
     layout.addWidget(run_button)
     layout.addWidget(summary_label)
     section.set_content(content)
     content.setEnabled(False)
+
+    suppress: dict = {"on": False}
 
     def _update_layer(skeleton_label_image: np.ndarray) -> None:
         if viewer is None:
@@ -115,6 +125,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             summary_label.setText("No usable seeds for the current tessellation.")
             return
 
+        signal_threshold = float(signal_trace_slider.value())
         run_button.setEnabled(False)
         summary_label.setText("Running skeletonization...")
         try:
@@ -122,6 +133,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 state.tessellation.domain_labels,
                 seeds,
                 state.image.pixel_size_um,
+                signal=state.image.signal if signal_threshold > 0 else None,
+                signal_threshold=signal_threshold,
             )
         finally:
             run_button.setEnabled(True)
@@ -131,7 +144,7 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             SkeletonsResult(
                 per_domain=per_domain,
                 skeleton_label_image=skel_label_image,
-                params={},
+                params={"signal_threshold": signal_threshold},
             ),
         )
 
@@ -171,8 +184,32 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         n = int(state.tessellation.domain_labels.max())
         summary_label.setText(f"{n} domains — click Run.")
 
-    state.subscribe("tessellation", _on_tessellation_changed)
+    def _on_image_changed() -> None:
+        """Reconfigure the signal-trace HistogramSlider from the loaded
+        image's in-tissue signal distribution (same convention as the
+        tessellation submenu's Min-signal slider)."""
+        if state.image is None:
+            return
+        img = state.image
+        sig_in_tissue = img.signal[img.tissue_mask]
+        if sig_in_tissue.size == 0:
+            return
+        upper = float(np.percentile(sig_in_tissue, 99.5))
+        if upper <= 0:
+            upper = float(sig_in_tissue.max() or 1.0)
+        suppress["on"] = True
+        try:
+            signal_trace_slider.set_range(0.0, max(upper, 1.0), step=1.0)
+            signal_trace_slider.set_data(sig_in_tissue, bins=100)
+            signal_trace_slider.set_value(0.0)
+        finally:
+            suppress["on"] = False
 
+    state.subscribe("tessellation", _on_tessellation_changed)
+    state.subscribe("image", _on_image_changed)
+
+    if state.image is not None:
+        _on_image_changed()
     if state.tessellation is not None:
         _on_tessellation_changed()
 

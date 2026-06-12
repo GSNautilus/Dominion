@@ -176,7 +176,7 @@ def _compute_tessellation(
 
 def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     """Build the tessellation submenu widget."""
-    section = CollapsibleSection("Tessellation")
+    section = CollapsibleSection("Tessellation", collapsed=True)
 
     content = QWidget()
     content_layout = QVBoxLayout(content)
