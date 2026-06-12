@@ -71,12 +71,6 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(4)
 
-    # Optional signal floor restricts what gets traced inside each
-    # domain. 0 = trace the full domain (default). Higher = trace only
-    # brighter pixels (sparser tracing of soma + main processes).
-    signal_trace_slider = HistogramSlider(
-        "Min signal for tracing", 0.0, 1.0, step=1.0, value=0.0, decimals=1
-    )
     # Geometric twig pruning. 0 = disabled.
     min_branch_slider = NumericSlider(
         "Min branch length (µm)", 0.0, 20.0, step=0.1, value=0.0, decimals=1
@@ -88,8 +82,9 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         "Min branch signal", 0.0, 1.0, step=1.0, value=0.0, decimals=1
     )
     # Tree-topology enforcement. Astrocyte filaments are tree-like — when
-    # ON, post-skeletonize we break cycles by dropping the dimmest pixel
-    # per cycle.
+    # ON, post-skeletonize we break real (skan-detected) loops by dropping
+    # the dimmest pixel along the loop path. The skeleton is also passed
+    # through a final largest-component filter so it stays connected.
     force_tree_checkbox = QCheckBox("Force tree topology (no loops)")
     force_tree_checkbox.setChecked(True)
 
@@ -98,7 +93,6 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     summary_label.setAlignment(Qt.AlignLeft)
     summary_label.setWordWrap(True)
 
-    layout.addWidget(signal_trace_slider)
     layout.addWidget(min_branch_slider)
     layout.addWidget(min_branch_signal_slider)
     layout.addWidget(force_tree_checkbox)
@@ -149,7 +143,6 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             summary_label.setText("No usable seeds for the current tessellation.")
             return
 
-        signal_threshold = float(signal_trace_slider.value())
         min_branch_length_um = float(min_branch_slider.value())
         min_branch_signal = float(min_branch_signal_slider.value())
         force_tree = bool(force_tree_checkbox.isChecked())
@@ -161,9 +154,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 seeds,
                 state.image.pixel_size_um,
                 # Always pass the signal — force_tree + min_branch_signal
-                # both consume it, not just signal_threshold > 0.
+                # both consume it.
                 signal=state.image.signal,
-                signal_threshold=signal_threshold,
                 min_branch_length_um=min_branch_length_um,
                 min_branch_signal=min_branch_signal,
                 force_tree=force_tree,
@@ -177,7 +169,6 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 per_domain=per_domain,
                 skeleton_label_image=skel_label_image,
                 params={
-                    "signal_threshold": signal_threshold,
                     "min_branch_length_um": min_branch_length_um,
                     "min_branch_signal": min_branch_signal,
                     "force_tree": force_tree,
@@ -236,10 +227,6 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             upper = float(sig_in_tissue.max() or 1.0)
         suppress["on"] = True
         try:
-            signal_trace_slider.set_range(0.0, max(upper, 1.0), step=1.0)
-            signal_trace_slider.set_data(sig_in_tissue, bins=100)
-            signal_trace_slider.set_value(0.0)
-            # The branch-signal slider uses the same in-tissue distribution.
             min_branch_signal_slider.set_range(0.0, max(upper, 1.0), step=1.0)
             min_branch_signal_slider.set_data(sig_in_tissue, bins=100)
             min_branch_signal_slider.set_value(0.0)

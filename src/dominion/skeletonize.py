@@ -65,63 +65,57 @@ def _skeleton_degree(skel: np.ndarray) -> np.ndarray:
 
 
 def _break_cycles(
-    skel: np.ndarray, signal_crop: np.ndarray | None = None
+    skel: np.ndarray,
+    pixel_size_um: float,
+    signal_crop: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Greedily remove the dimmest degree-2 pixel inside each cycle until
-    the skeleton is a forest of trees.
+    """Break every real loop in the skeleton until the topology is a tree.
 
-    A pixel-graph is built from the skeleton's 8-neighborhood. Cycles are
-    detected by node-count vs edge-count (with a per-component correction
-    for forests). At each iteration: pick a cycle, find degree-2 pixels
-    on it, drop the dimmest one (per ``signal_crop``; if signal is not
-    provided, drop any). The former cycle becomes a path.
+    Uses skan's branch classification: a branch with ``branch_type == 3``
+    is a true loop (the path's source node equals its destination node).
+    For each loop, remove the dimmest pixel along its path (or the
+    midpoint if signal is not provided), then re-decompose with skan and
+    repeat until no loops remain.
 
-    Use this when you know the underlying biology can't loop (astrocyte
-    filaments, dendritic arbors). A no-op when there are no cycles.
+    Why not the obvious "build a pixel graph and find a cycle basis"
+    approach: scikit-image's ``skeletonize`` produces multi-pixel patches
+    at branchpoints, which a naive pixel graph flags as cycles even
+    though they are not biological loops. Trusting skan's path
+    decomposition avoids those false positives.
     """
-    import networkx as nx  # transitive dep of napari
+    from skan import Skeleton, summarize
 
     pruned = skel.copy()
     for _ in range(_CYCLE_MAX_ITER):
-        ys, xs = np.where(pruned)
-        if ys.size == 0:
+        if int(pruned.sum()) < 2:
             break
-        nodes = list(zip(ys.tolist(), xs.tolist()))
-        node_set = set(nodes)
-        G = nx.Graph()
-        G.add_nodes_from(nodes)
-        for y, x in nodes:
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    if dy == 0 and dx == 0:
-                        continue
-                    nbr = (y + dy, x + dx)
-                    if nbr in node_set and nbr > (y, x):
-                        G.add_edge((y, x), nbr)
-
-        # Forest test: edges ≤ nodes − components.
-        n_components = nx.number_connected_components(G)
-        if G.number_of_edges() <= G.number_of_nodes() - n_components:
-            break
-
         try:
-            cycle = nx.find_cycle(G)
-        except nx.NetworkXNoCycle:
+            obj = Skeleton(pruned.astype(np.uint8), spacing=float(pixel_size_um))
+            summary = summarize(obj, separator="_")
+        except ValueError:
+            break
+        if "branch_type" not in summary.columns:
             break
 
-        cycle_pixels: set[tuple[int, int]] = set()
-        for u, v in cycle:
-            cycle_pixels.add(u)
-            cycle_pixels.add(v)
-        candidates = [p for p in cycle_pixels if G.degree(p) == 2]
-        if not candidates:
-            candidates = list(cycle_pixels)
+        loop_indices = [
+            i
+            for i in range(int(obj.n_paths))
+            if int(summary["branch_type"].iloc[i]) == 3
+        ]
+        if not loop_indices:
+            break
+
+        # Break the first reported loop. Iteration will pick up the rest.
+        i = loop_indices[0]
+        path = np.asarray(obj.path_coordinates(i)).astype(np.int64)
+        if path.shape[0] < 2:
+            break
         if signal_crop is not None:
-            intensities = [float(signal_crop[p[0], p[1]]) for p in candidates]
-            chosen = candidates[int(np.argmin(intensities))]
+            intensities = signal_crop[path[:, 0], path[:, 1]]
+            dim_idx = int(np.argmin(intensities))
         else:
-            chosen = candidates[0]
-        pruned[chosen[0], chosen[1]] = False
+            dim_idx = path.shape[0] // 2
+        pruned[int(path[dim_idx, 0]), int(path[dim_idx, 1])] = False
     return pruned
 
 
@@ -224,7 +218,6 @@ def _skeletonize_one_domain(
     seed_rc_in_crop: tuple[float, float],
     pixel_size_um: float,
     signal_crop: np.ndarray | None = None,
-    signal_threshold: float = 0.0,
     min_branch_length_um: float = 0.0,
     min_branch_signal: float = 0.0,
     force_tree: bool = True,
@@ -232,35 +225,29 @@ def _skeletonize_one_domain(
     """Skeletonize one domain (already cropped to its bbox); return per-cell
     info dict or None if the domain has no skeleton.
 
-    If ``signal_crop`` and ``signal_threshold > 0`` are provided, the
-    trace mask is restricted to ``domain_mask & (signal_crop >= threshold)``
-    before skeletonization. The skeleton therefore stays confined to the
-    cell's domain but only traces pixels brighter than the threshold —
-    higher threshold = sparser tracing of just the bright soma + main
-    processes; threshold = 0 = trace the full domain (current default).
-
     Coordinates in the returned dict are in the CROP frame — the caller
     is responsible for shifting them back to the full image by adding
     the crop's (y0, x0) offset.
-    """
-    base = domain_mask_crop.astype(bool, copy=False)
-    if signal_crop is not None and signal_threshold > 0:
-        base = base & (signal_crop >= float(signal_threshold))
 
-    # Drop disconnected fragments (a rare side effect of min-signal carving
-    # or of a signal threshold) so the skeleton is a single graph.
-    mask = _largest_component(base)
+    The output skeleton is **guaranteed connected** (single 8-connected
+    component) — a ``_largest_component`` pass runs after all pruning
+    steps to drop any fragments that loop-breaking or twig-pruning may
+    have orphaned.
+    """
+    # Drop disconnected fragments in the input domain mask first.
+    mask = _largest_component(domain_mask_crop.astype(bool, copy=False))
     if not mask.any():
         return None
 
     skel = _skeletonize(mask).astype(bool, copy=False)
     if skel.sum() < 2:
         # Single-pixel or empty skeleton — skan can't build a graph from this.
-        # Treat as a degenerate "soma only" cell with zero branch length.
         return None
 
     if force_tree:
-        skel = _break_cycles(skel, signal_crop=signal_crop)
+        skel = _break_cycles(
+            skel, pixel_size_um=pixel_size_um, signal_crop=signal_crop
+        )
         if skel.sum() < 2:
             return None
 
@@ -274,6 +261,12 @@ def _skeletonize_one_domain(
         )
         if skel.sum() < 2:
             return None
+
+    # Final connectivity guarantee. If any of the pruning / cycle-breaking
+    # steps disconnected the skeleton, keep the largest piece only.
+    skel = _largest_component(skel)
+    if skel.sum() < 2:
+        return None
 
     # Build the skan Skeleton; ``spacing`` makes path lengths come out in
     # microns. We import lazily so building the module doesn't pull skan
@@ -330,7 +323,6 @@ def skeletonize_domains(
     seed_positions: dict[int, tuple[float, float]],
     pixel_size_um: float,
     signal: np.ndarray | None = None,
-    signal_threshold: float = 0.0,
     min_branch_length_um: float = 0.0,
     min_branch_signal: float = 0.0,
     force_tree: bool = True,
@@ -376,15 +368,14 @@ def skeletonize_domains(
         seed_y, seed_x = seed_positions[k_int]
         seed_in_crop = (seed_y - sl_y.start, seed_x - sl_x.start)
 
-        # Always crop the signal if we have it — force_tree and the new
-        # min_branch_signal both need it, not just signal_threshold > 0.
+        # Always crop the signal if we have it — force_tree and
+        # min_branch_signal both consume it.
         signal_crop = signal[sl_y, sl_x] if signal is not None else None
         result = _skeletonize_one_domain(
             mask_full[sl_y, sl_x],
             seed_in_crop,
             pixel_size_um,
             signal_crop=signal_crop,
-            signal_threshold=signal_threshold,
             min_branch_length_um=min_branch_length_um,
             min_branch_signal=min_branch_signal,
             force_tree=force_tree,
