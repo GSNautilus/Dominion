@@ -236,6 +236,33 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     state.subscribe("tessellation", _on_tessellation_changed)
     state.subscribe("image", _on_image_changed)
 
+    def _get_settings() -> dict:
+        return {
+            "min_branch_length_um": float(min_branch_slider.value()),
+            "min_branch_signal": float(min_branch_signal_slider.value()),
+            "force_tree": bool(force_tree_checkbox.isChecked()),
+        }
+
+    def _set_widened(slider, value: float) -> None:
+        slider.set_value(value)
+        if abs(slider.value() - value) > 1e-6:
+            slider.set_range(0.0, max(value * 1.2, 1.0), step=max(value / 1000, 1e-6))
+            slider.set_value(value)
+
+    def _apply_settings(s: dict) -> None:
+        suppress["on"] = True
+        try:
+            if "min_branch_length_um" in s:
+                min_branch_slider.set_value(float(s["min_branch_length_um"]))
+            if "min_branch_signal" in s:
+                _set_widened(min_branch_signal_slider, float(s["min_branch_signal"]))
+            if "force_tree" in s:
+                force_tree_checkbox.setChecked(bool(s["force_tree"]))
+        finally:
+            suppress["on"] = False
+
+    state.register_settings("skeletons", _get_settings, _apply_settings)
+
     if state.image is not None:
         _on_image_changed()
     if state.tessellation is not None:

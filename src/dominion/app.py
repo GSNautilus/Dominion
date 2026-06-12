@@ -18,6 +18,7 @@ from . import (
     submenu2_seeds,
     submenu3_tessellation,
     submenu_a_signal_seeds,
+    submenu_batch,
     submenu_measurements,
     submenu_skeletons,
     submenu_sholl,
@@ -93,6 +94,7 @@ def build_dock_widget(
     layout.addWidget(submenu_skeletons.build_widget(state, viewer))
     layout.addWidget(submenu_sholl.build_widget(state, viewer))
     layout.addWidget(submenu_measurements.build_widget(state, viewer))
+    layout.addWidget(submenu_batch.build_widget(state, viewer))
     layout.addStretch(1)
 
     return container

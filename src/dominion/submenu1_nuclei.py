@@ -289,4 +289,18 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
     run_button.clicked.connect(_on_run_clicked)
 
+    def _get_settings() -> dict:
+        return {
+            "prob_thresh": float(prob_slider.value()),
+            "nms_thresh": float(nms_slider.value()),
+        }
+
+    def _apply_settings(s: dict) -> None:
+        if "prob_thresh" in s:
+            prob_slider.set_value(float(s["prob_thresh"]))
+        if "nms_thresh" in s:
+            nms_slider.set_value(float(s["nms_thresh"]))
+
+    state.register_settings("nuclei_segmentation", _get_settings, _apply_settings)
+
     return section

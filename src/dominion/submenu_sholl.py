@@ -111,6 +111,15 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
     state.subscribe("skeletons", _on_skeletons_changed)
 
+    def _get_settings() -> dict:
+        return {"ring_spacing_um": float(spacing_slider.value())}
+
+    def _apply_settings(s: dict) -> None:
+        if "ring_spacing_um" in s:
+            spacing_slider.set_value(float(s["ring_spacing_um"]))
+
+    state.register_settings("sholl_analysis", _get_settings, _apply_settings)
+
     if state.skeletons is not None:
         _on_skeletons_changed()
 

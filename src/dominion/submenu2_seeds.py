@@ -326,6 +326,36 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     state.subscribe("nuclei", _on_nuclei_changed)
     state.subscribe("image", _on_image_changed)
 
+    def _get_settings() -> dict:
+        return {
+            "T": float(t_slider.value()),
+            "R_um": float(r_slider.value()),
+            "alpha": float(alpha_slider.value()),
+            "theta": float(theta_slider.value()),
+        }
+
+    def _set_widened(slider, value: float) -> None:
+        slider.set_value(value)
+        if abs(slider.value() - value) > 1e-6:
+            slider.set_range(0.0, max(value * 1.2, 1.0), step=max(value / 1000, 1e-6))
+            slider.set_value(value)
+
+    def _apply_settings(s: dict) -> None:
+        suppress["on"] = True
+        try:
+            if "T" in s:
+                _set_widened(t_slider, float(s["T"]))
+            if "R_um" in s:
+                r_slider.set_value(float(s["R_um"]))
+            if "alpha" in s:
+                alpha_slider.set_value(float(s["alpha"]))
+            if "theta" in s:
+                _set_widened(theta_slider, float(s["theta"]))
+        finally:
+            suppress["on"] = False
+
+    state.register_settings("object_classification", _get_settings, _apply_settings)
+
     # Handle the case where nuclei were already set before we subscribed.
     if state.nuclei is not None and state.image is not None:
         _on_nuclei_changed()

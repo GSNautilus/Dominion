@@ -79,6 +79,12 @@ class AppState:
         self._subscribers: dict[str, list[Callable[[], None]]] = {
             slot: [] for slot in _SLOT_TYPES
         }
+        # Settings registry: each submenu can register a (get, apply) pair
+        # under a section name so the Batch submenu can round-trip all
+        # widget values through a JSON file.
+        self._settings_providers: dict[
+            str, tuple[Callable[[], dict], Callable[[dict], None]]
+        ] = {}
 
     def subscribe(self, slot_name: str, callback: Callable[[], None]) -> None:
         """Register ``callback`` to be invoked whenever ``slot_name`` changes."""
@@ -112,3 +118,35 @@ class AppState:
         for slot in changed:
             for cb in list(self._subscribers[slot]):
                 cb()
+
+    # --- Settings registry --------------------------------------------------
+
+    def register_settings(
+        self,
+        section: str,
+        get_fn: Callable[[], dict],
+        apply_fn: Callable[[dict], None],
+    ) -> None:
+        """Register a (get, apply) pair for the given section name.
+
+        ``get_fn()`` should return a JSON-serialisable dict of the section's
+        current widget values. ``apply_fn(d)`` should set widgets from a
+        previously-saved dict, tolerating missing keys gracefully.
+        """
+        self._settings_providers[section] = (get_fn, apply_fn)
+
+    def get_all_settings(self) -> dict:
+        """Return a nested dict of every registered section's current settings."""
+        return {name: get() for name, (get, _apply) in self._settings_providers.items()}
+
+    def apply_all_settings(self, settings: dict) -> list[str]:
+        """Apply a previously-saved settings dict. Returns the list of
+        section names that were applied (skipped sections aren't in
+        the dict or aren't registered)."""
+        applied: list[str] = []
+        for name, (_get, apply) in self._settings_providers.items():
+            section = settings.get(name)
+            if isinstance(section, dict):
+                apply(section)
+                applied.append(name)
+        return applied

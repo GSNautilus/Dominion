@@ -511,6 +511,24 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     state.subscribe("tessellation", _on_tessellation_changed)
     state.subscribe("measurements", _on_measurements_changed)
 
+    def _get_settings() -> dict:
+        # Save the channel-checkbox state by channel name. Channels that
+        # are absent on the next image just won't be re-checked.
+        return {
+            "channels_checked": [
+                name for name, cb in checkboxes.items() if cb.isChecked()
+            ],
+        }
+
+    def _apply_settings(s: dict) -> None:
+        wanted = set(s.get("channels_checked", []) or [])
+        if not wanted:
+            return
+        for name, cb in checkboxes.items():
+            cb.setChecked(name in wanted)
+
+    state.register_settings("measurements", _get_settings, _apply_settings)
+
     if state.image is not None:
         _on_image_changed()
     if state.tessellation is not None:
