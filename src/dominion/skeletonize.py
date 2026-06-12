@@ -74,17 +74,30 @@ def _skeletonize_one_domain(
     domain_mask_crop: np.ndarray,
     seed_rc_in_crop: tuple[float, float],
     pixel_size_um: float,
+    signal_crop: np.ndarray | None = None,
+    signal_threshold: float = 0.0,
 ) -> dict | None:
     """Skeletonize one domain (already cropped to its bbox); return per-cell
     info dict or None if the domain has no skeleton.
+
+    If ``signal_crop`` and ``signal_threshold > 0`` are provided, the
+    trace mask is restricted to ``domain_mask & (signal_crop >= threshold)``
+    before skeletonization. The skeleton therefore stays confined to the
+    cell's domain but only traces pixels brighter than the threshold —
+    higher threshold = sparser tracing of just the bright soma + main
+    processes; threshold = 0 = trace the full domain (current default).
 
     Coordinates in the returned dict are in the CROP frame — the caller
     is responsible for shifting them back to the full image by adding
     the crop's (y0, x0) offset.
     """
-    # Drop disconnected fragments (a rare side effect of min-signal carving)
-    # so the skeleton is a single graph.
-    mask = _largest_component(domain_mask_crop.astype(bool, copy=False))
+    base = domain_mask_crop.astype(bool, copy=False)
+    if signal_crop is not None and signal_threshold > 0:
+        base = base & (signal_crop >= float(signal_threshold))
+
+    # Drop disconnected fragments (a rare side effect of min-signal carving
+    # or of a signal threshold) so the skeleton is a single graph.
+    mask = _largest_component(base)
     if not mask.any():
         return None
 
@@ -148,6 +161,8 @@ def skeletonize_domains(
     domain_labels: np.ndarray,
     seed_positions: dict[int, tuple[float, float]],
     pixel_size_um: float,
+    signal: np.ndarray | None = None,
+    signal_threshold: float = 0.0,
 ) -> tuple[dict[int, dict], np.ndarray]:
     """Skeletonize every domain in ``domain_labels`` and return per-domain
     info dicts plus a combined skeleton label image.
@@ -190,8 +205,17 @@ def skeletonize_domains(
         seed_y, seed_x = seed_positions[k_int]
         seed_in_crop = (seed_y - sl_y.start, seed_x - sl_x.start)
 
+        signal_crop = (
+            signal[sl_y, sl_x]
+            if signal is not None and signal_threshold > 0
+            else None
+        )
         result = _skeletonize_one_domain(
-            mask_full[sl_y, sl_x], seed_in_crop, pixel_size_um
+            mask_full[sl_y, sl_x],
+            seed_in_crop,
+            pixel_size_um,
+            signal_crop=signal_crop,
+            signal_threshold=signal_threshold,
         )
         if result is None:
             continue
