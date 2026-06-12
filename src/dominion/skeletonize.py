@@ -69,19 +69,29 @@ def _break_cycles(
     pixel_size_um: float,
     signal_crop: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Break every real loop in the skeleton until the topology is a tree.
+    """Break every topological cycle in the skeleton until the path graph
+    is a tree.
 
-    Uses skan's branch classification: a branch with ``branch_type == 3``
-    is a true loop (the path's source node equals its destination node).
-    For each loop, remove the dimmest pixel along its path (or the
-    midpoint if signal is not provided), then re-decompose with skan and
-    repeat until no loops remain.
+    Works on the **branch graph** (nodes = skan's junctions/endpoints,
+    edges = paths), not just on skan's ``branch_type == 3`` classification
+    (that flag covers only isolated closed loops, missing the much more
+    common case of two paths between the same pair of junctions — a side
+    branch that rejoins the trunk). Algorithm:
 
-    Why not the obvious "build a pixel graph and find a cycle basis"
-    approach: scikit-image's ``skeletonize`` produces multi-pixel patches
-    at branchpoints, which a naive pixel graph flags as cycles even
-    though they are not biological loops. Trusting skan's path
-    decomposition avoids those false positives.
+    1. Build a list of paths with ``(src_node, dst_node, min_signal)``.
+    2. Sort by signal descending (brightest first).
+    3. Union-find: walk paths in order; if a path's endpoints are already
+       connected via earlier (brighter) paths, that path is redundant
+       (it creates a cycle). Mark it for removal.
+    4. For each redundant path, delete **all interior pixels** (everything
+       except the two branchpoint nodes, which are shared with kept
+       paths).
+    5. Re-decompose with skan and repeat in case removing interior
+       pixels exposes new structure. Converges in 1–2 passes for typical
+       inputs.
+
+    A self-loop where ``src == dst`` (skan's type-3) is also caught and
+    treated as redundant.
     """
     from skan import Skeleton, summarize
 
@@ -94,28 +104,104 @@ def _break_cycles(
             summary = summarize(obj, separator="_")
         except ValueError:
             break
-        if "branch_type" not in summary.columns:
+        if (
+            "node_id_src" not in summary.columns
+            or "node_id_dst" not in summary.columns
+        ):
             break
 
-        loop_indices = [
-            i
-            for i in range(int(obj.n_paths))
-            if int(summary["branch_type"].iloc[i]) == 3
-        ]
-        if not loop_indices:
+        n_paths = int(obj.n_paths)
+        if n_paths == 0:
             break
 
-        # Break the first reported loop. Iteration will pick up the rest.
-        i = loop_indices[0]
-        path = np.asarray(obj.path_coordinates(i)).astype(np.int64)
-        if path.shape[0] < 2:
+        paths_info: list[tuple[int, int, int, float]] = []
+        for i in range(n_paths):
+            src = int(summary["node_id_src"].iloc[i])
+            dst = int(summary["node_id_dst"].iloc[i])
+            path = np.asarray(obj.path_coordinates(i)).astype(np.int64)
+            if path.shape[0] == 0:
+                continue
+            if signal_crop is not None:
+                # Use min along the path: a path is only as bright as its
+                # weakest link.
+                brightness = float(signal_crop[path[:, 0], path[:, 1]].min())
+            else:
+                brightness = float(path.shape[0])  # prefer longer paths
+            paths_info.append((i, src, dst, brightness))
+
+        # Sort brightest first so they win the union-find race.
+        paths_info.sort(key=lambda x: -x[3])
+
+        parent: dict[int, int] = {}
+
+        def find(x: int) -> int:
+            root = x
+            while parent.get(root, root) != root:
+                root = parent[root]
+            # Path compression for amortized near-O(1).
+            while parent.get(x, x) != root:
+                nxt = parent[x]
+                parent[x] = root
+                x = nxt
+            return root
+
+        def union(x: int, y: int) -> bool:
+            rx, ry = find(x), find(y)
+            if rx == ry:
+                return False
+            parent[rx] = ry
+            return True
+
+        redundant_paths: list[int] = []
+        for i, src, dst, _b in paths_info:
+            if src == dst:
+                redundant_paths.append(i)
+                continue
+            if not union(src, dst):
+                redundant_paths.append(i)
+
+        if not redundant_paths:
             break
-        if signal_crop is not None:
-            intensities = signal_crop[path[:, 0], path[:, 1]]
-            dim_idx = int(np.argmin(intensities))
-        else:
-            dim_idx = path.shape[0] // 2
-        pruned[int(path[dim_idx, 0]), int(path[dim_idx, 1])] = False
+
+        any_modified = False
+        for path_idx in redundant_paths:
+            path = np.asarray(obj.path_coordinates(path_idx)).astype(np.int64)
+            n_px = path.shape[0]
+            if n_px == 0:
+                continue
+            if n_px >= 3:
+                # Remove all interior pixels — keeps the two branchpoints
+                # (shared with other paths).
+                for r, c in path[1:-1]:
+                    if pruned[int(r), int(c)]:
+                        pruned[int(r), int(c)] = False
+                        any_modified = True
+            else:
+                # 1- or 2-pixel redundant path: both pixels coincide with
+                # branchpoint nodes shared by other paths, so removing
+                # either may temporarily disconnect a small piece. We
+                # still need to break the cycle — drop the dimmer pixel.
+                # The _largest_component pass at the end re-knits things.
+                if n_px == 1:
+                    candidates = [0]
+                else:
+                    candidates = [0, 1]
+                if signal_crop is not None:
+                    vals = [
+                        float(signal_crop[int(path[k, 0]), int(path[k, 1])])
+                        for k in candidates
+                    ]
+                    k_drop = candidates[int(np.argmin(vals))]
+                else:
+                    k_drop = candidates[0]
+                py, px = int(path[k_drop, 0]), int(path[k_drop, 1])
+                if pruned[py, px]:
+                    pruned[py, px] = False
+                    any_modified = True
+
+        if not any_modified:
+            break
+
     return pruned
 
 
