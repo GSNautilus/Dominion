@@ -1,9 +1,9 @@
 """Mutable application state shared across submenus.
 
-Holds the four pipeline slots (``image``, ``nuclei``, ``seeds``,
-``tessellation``) and notifies subscribers when slots change. Setting a
-slot clears every downstream slot in the fixed chain
-``image -> nuclei -> seeds -> tessellation``.
+Holds the pipeline slots (``image``, ``nuclei``, ``seeds``,
+``tessellation``, ``measurements``) and notifies subscribers when slots
+change. Setting a slot clears every downstream slot in the fixed chain
+``image -> nuclei -> seeds -> tessellation -> measurements``.
 """
 
 from __future__ import annotations
@@ -12,29 +12,32 @@ from typing import Callable, Optional
 
 from .types import (
     ImageData,
+    MeasurementsResult,
     NucleiResult,
     SeedsResult,
     TessellationResult,
 )
 
 
-_SLOT_ORDER = ("image", "nuclei", "seeds", "tessellation")
+_SLOT_ORDER = ("image", "nuclei", "seeds", "tessellation", "measurements")
 _SLOT_TYPES = {
     "image": ImageData,
     "nuclei": NucleiResult,
     "seeds": SeedsResult,
     "tessellation": TessellationResult,
+    "measurements": MeasurementsResult,
 }
 
 
 class AppState:
-    """Container for the four pipeline slots with change subscriptions."""
+    """Container for the pipeline slots with change subscriptions."""
 
     def __init__(self) -> None:
         self.image: Optional[ImageData] = None
         self.nuclei: Optional[NucleiResult] = None
         self.seeds: Optional[SeedsResult] = None
         self.tessellation: Optional[TessellationResult] = None
+        self.measurements: Optional[MeasurementsResult] = None
         self._subscribers: dict[str, list[Callable[[], None]]] = {
             slot: [] for slot in _SLOT_ORDER
         }
