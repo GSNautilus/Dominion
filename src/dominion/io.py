@@ -1,8 +1,10 @@
 """Image loading for DOMINION.
 
-Reads 2D single-channel TIFFs (treated as the signal channel) or
-2-channel CYX TIFFs (channel 0 = signal, channel 1 = nuclei) and
-extracts the µm/pixel scale from the TIFF resolution metadata.
+Reads 2D single-channel TIFFs (treated as the signal channel),
+2-channel CYX TIFFs (channel 0 = signal, channel 1 = nuclei), or
+N-channel CYX TIFFs where channels beyond the first two are kept as
+``extra_channels`` for per-domain measurement. Pixel size is parsed
+from the TIFF resolution metadata.
 """
 
 from __future__ import annotations
@@ -46,11 +48,17 @@ def _parse_unit_from_description(description: str | None) -> str | None:
 def load_image(path: Path) -> ImageData:
     """Load a TIFF and return an :class:`ImageData`.
 
-    Accepts either a 2D single-channel image (treated as the signal
-    channel, with nuclei set to ``None``) or a 3D CYX stack where
-    channel 0 is the signal channel and channel 1 is the nuclei channel.
-    Single-channel input works with ``--mode signal``; ``--mode nuclei``
-    requires both channels.
+    Accepts:
+
+    * 2D single-channel — treated as the signal channel; nuclei is ``None``.
+    * 3D CYX with 1 channel — same as 2D single-channel.
+    * 3D CYX with 2 channels — channel 0 = signal, channel 1 = nuclei.
+    * 3D CYX with N channels (N > 2) — channels 0 and 1 as above; channels
+      2..N-1 become ``extra_channels`` keyed as ``"channel_2"`` ... ``"channel_<N-1>"``
+      and are available to the Measurements submenu.
+
+    ``--mode signal`` works on any of the above. ``--mode nuclei`` requires
+    at least 2 channels.
 
     Pixel size is parsed from the TIFF ``XResolution`` tag using the
     convention ``pixels_per_um = num/den`` (i.e. ImageJ writes resolution
@@ -66,12 +74,15 @@ def load_image(path: Path) -> ImageData:
         desc_tag = page.tags.get("ImageDescription", None)
         description = desc_tag.value if desc_tag is not None else None
 
+    extra_channels: dict[str, np.ndarray] = {}
     if arr.ndim == 2:
         signal = arr
         nuclei = None
     elif arr.ndim == 3 and arr.shape[0] >= 1:
         signal = arr[0]
         nuclei = arr[1] if arr.shape[0] >= 2 else None
+        for ch_idx in range(2, arr.shape[0]):
+            extra_channels[f"channel_{ch_idx}"] = arr[ch_idx]
     else:
         raise ValueError(
             f"Expected a 2D single-channel TIFF or a 3D CYX TIFF, "
@@ -121,4 +132,5 @@ def load_image(path: Path) -> ImageData:
         tissue_mask=tissue_mask,
         pixel_size_um=pixel_size_um,
         source_path=path,
+        extra_channels=extra_channels,
     )

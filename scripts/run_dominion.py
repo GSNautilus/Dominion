@@ -69,6 +69,19 @@ def main(argv: list[str] | None = None) -> None:
             contrast_limits=_auto_contrast_limits(image.nuclei),
             scale=scale,
         )
+    # Extra channels (beyond signal + nuclei) are cycled through a small
+    # palette so they're visually distinguishable in the viewer.
+    _extra_colormaps = ("magenta", "yellow", "cyan", "red", "gray")
+    for i, (name, arr) in enumerate(image.extra_channels.items()):
+        viewer.add_image(
+            arr,
+            name=name,
+            colormap=_extra_colormaps[i % len(_extra_colormaps)],
+            blending="additive",
+            contrast_limits=_auto_contrast_limits(arr),
+            scale=scale,
+            visible=False,  # off by default to avoid clutter
+        )
 
     dock = build_dock_widget(state, viewer, mode=args.mode)
     viewer.window.add_dock_widget(

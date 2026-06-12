@@ -18,6 +18,7 @@ from . import (
     submenu2_seeds,
     submenu3_tessellation,
     submenu_a_signal_seeds,
+    submenu_measurements,
 )
 from .state import AppState
 
@@ -87,6 +88,7 @@ def build_dock_widget(
     else:  # mode == "signal"
         layout.addWidget(submenu_a_signal_seeds.build_widget(state, viewer))
     layout.addWidget(submenu3_tessellation.build_widget(state, viewer))
+    layout.addWidget(submenu_measurements.build_widget(state, viewer))
     layout.addStretch(1)
 
     return container
