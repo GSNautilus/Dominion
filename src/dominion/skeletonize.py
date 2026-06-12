@@ -24,6 +24,9 @@ from scipy import ndimage as ndi
 from skimage.morphology import skeletonize as _skeletonize
 
 
+_PRUNE_MAX_ITER = 8  # safety bound on the twig-pruning loop
+
+
 def _largest_component(mask: np.ndarray) -> np.ndarray:
     """Return only the largest 8-connected component of ``mask``.
 
@@ -53,6 +56,72 @@ def _crop_bbox(mask: np.ndarray) -> tuple[slice, slice]:
     )
 
 
+def _skeleton_degree(skel: np.ndarray) -> np.ndarray:
+    """Per-pixel 8-connected neighbor count restricted to skeleton pixels."""
+    k = np.ones((3, 3), dtype=np.uint8)
+    nbr = ndi.convolve(skel.astype(np.uint8), k, mode="constant", cval=0) - skel.astype(np.uint8)
+    return nbr * skel.astype(np.uint8)
+
+
+def _prune_short_twigs(
+    skel: np.ndarray, pixel_size_um: float, min_branch_length_um: float
+) -> np.ndarray:
+    """Iteratively remove endpoint-terminated branches shorter than the
+    threshold. Returns the pruned skeleton (a new boolean array).
+
+    A twig is a branch that runs from an endpoint (degree 1) to a
+    branchpoint (degree 3+). After removing a short twig, a new endpoint
+    may emerge at the former branchpoint — hence the loop. Cap iterations
+    to avoid pathological cases. ``min_branch_length_um <= 0`` is a no-op.
+    """
+    if min_branch_length_um <= 0:
+        return skel
+    from skan import Skeleton, summarize
+
+    pruned = skel.copy()
+    for _ in range(_PRUNE_MAX_ITER):
+        if int(pruned.sum()) < 2:
+            break
+        try:
+            obj = Skeleton(pruned.astype(np.uint8), spacing=float(pixel_size_um))
+            summary = summarize(obj, separator="_")
+        except ValueError:
+            break
+        if "branch_type" not in summary.columns:
+            break
+
+        deg = _skeleton_degree(pruned)
+        n_paths = int(obj.n_paths)
+        lengths = obj.path_lengths()
+        any_pruned = False
+        for i in range(n_paths):
+            btype = int(summary["branch_type"].iloc[i])
+            if btype != 1:
+                continue  # only prune endpoint -> branchpoint twigs
+            if float(lengths[i]) >= float(min_branch_length_um):
+                continue
+            path = np.asarray(obj.path_coordinates(i)).astype(np.int64)
+            sy, sx = int(path[0, 0]), int(path[0, 1])
+            ey, ex = int(path[-1, 0]), int(path[-1, 1])
+            sd = int(deg[sy, sx])
+            ed = int(deg[ey, ex])
+            if sd == 1:
+                # Endpoint is at the start; keep the branchpoint end.
+                for r, c in path[:-1]:
+                    pruned[int(r), int(c)] = False
+                any_pruned = True
+            elif ed == 1:
+                for r, c in path[1:]:
+                    pruned[int(r), int(c)] = False
+                any_pruned = True
+            # If neither endpoint has degree 1 in the live skeleton, the
+            # branch has already lost its terminus from a prior step.
+            # Skip — the next iteration will catch any leftover spur.
+        if not any_pruned:
+            break
+    return pruned
+
+
 def _nearest_skeleton_pixel(
     skeleton: np.ndarray, seed_rc: tuple[float, float]
 ) -> tuple[int, int]:
@@ -76,6 +145,7 @@ def _skeletonize_one_domain(
     pixel_size_um: float,
     signal_crop: np.ndarray | None = None,
     signal_threshold: float = 0.0,
+    min_branch_length_um: float = 0.0,
 ) -> dict | None:
     """Skeletonize one domain (already cropped to its bbox); return per-cell
     info dict or None if the domain has no skeleton.
@@ -106,6 +176,11 @@ def _skeletonize_one_domain(
         # Single-pixel or empty skeleton — skan can't build a graph from this.
         # Treat as a degenerate "soma only" cell with zero branch length.
         return None
+
+    if min_branch_length_um > 0:
+        skel = _prune_short_twigs(skel, pixel_size_um, min_branch_length_um)
+        if skel.sum() < 2:
+            return None
 
     # Build the skan Skeleton; ``spacing`` makes path lengths come out in
     # microns. We import lazily so building the module doesn't pull skan
@@ -163,6 +238,7 @@ def skeletonize_domains(
     pixel_size_um: float,
     signal: np.ndarray | None = None,
     signal_threshold: float = 0.0,
+    min_branch_length_um: float = 0.0,
 ) -> tuple[dict[int, dict], np.ndarray]:
     """Skeletonize every domain in ``domain_labels`` and return per-domain
     info dicts plus a combined skeleton label image.
@@ -216,6 +292,7 @@ def skeletonize_domains(
             pixel_size_um,
             signal_crop=signal_crop,
             signal_threshold=signal_threshold,
+            min_branch_length_um=min_branch_length_um,
         )
         if result is None:
             continue
