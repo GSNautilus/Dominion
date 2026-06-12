@@ -25,6 +25,7 @@ from skimage.morphology import skeletonize as _skeletonize
 
 
 _PRUNE_MAX_ITER = 8  # safety bound on the twig-pruning loop
+_CYCLE_MAX_ITER = 32  # safety bound on the cycle-breaking loop
 
 
 def _largest_component(mask: np.ndarray) -> np.ndarray:
@@ -63,20 +64,94 @@ def _skeleton_degree(skel: np.ndarray) -> np.ndarray:
     return nbr * skel.astype(np.uint8)
 
 
-def _prune_short_twigs(
-    skel: np.ndarray, pixel_size_um: float, min_branch_length_um: float
+def _break_cycles(
+    skel: np.ndarray, signal_crop: np.ndarray | None = None
 ) -> np.ndarray:
-    """Iteratively remove endpoint-terminated branches shorter than the
-    threshold. Returns the pruned skeleton (a new boolean array).
+    """Greedily remove the dimmest degree-2 pixel inside each cycle until
+    the skeleton is a forest of trees.
 
-    A twig is a branch that runs from an endpoint (degree 1) to a
-    branchpoint (degree 3+). After removing a short twig, a new endpoint
-    may emerge at the former branchpoint — hence the loop. Cap iterations
-    to avoid pathological cases. ``min_branch_length_um <= 0`` is a no-op.
+    A pixel-graph is built from the skeleton's 8-neighborhood. Cycles are
+    detected by node-count vs edge-count (with a per-component correction
+    for forests). At each iteration: pick a cycle, find degree-2 pixels
+    on it, drop the dimmest one (per ``signal_crop``; if signal is not
+    provided, drop any). The former cycle becomes a path.
+
+    Use this when you know the underlying biology can't loop (astrocyte
+    filaments, dendritic arbors). A no-op when there are no cycles.
     """
-    if min_branch_length_um <= 0:
+    import networkx as nx  # transitive dep of napari
+
+    pruned = skel.copy()
+    for _ in range(_CYCLE_MAX_ITER):
+        ys, xs = np.where(pruned)
+        if ys.size == 0:
+            break
+        nodes = list(zip(ys.tolist(), xs.tolist()))
+        node_set = set(nodes)
+        G = nx.Graph()
+        G.add_nodes_from(nodes)
+        for y, x in nodes:
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dy == 0 and dx == 0:
+                        continue
+                    nbr = (y + dy, x + dx)
+                    if nbr in node_set and nbr > (y, x):
+                        G.add_edge((y, x), nbr)
+
+        # Forest test: edges ≤ nodes − components.
+        n_components = nx.number_connected_components(G)
+        if G.number_of_edges() <= G.number_of_nodes() - n_components:
+            break
+
+        try:
+            cycle = nx.find_cycle(G)
+        except nx.NetworkXNoCycle:
+            break
+
+        cycle_pixels: set[tuple[int, int]] = set()
+        for u, v in cycle:
+            cycle_pixels.add(u)
+            cycle_pixels.add(v)
+        candidates = [p for p in cycle_pixels if G.degree(p) == 2]
+        if not candidates:
+            candidates = list(cycle_pixels)
+        if signal_crop is not None:
+            intensities = [float(signal_crop[p[0], p[1]]) for p in candidates]
+            chosen = candidates[int(np.argmin(intensities))]
+        else:
+            chosen = candidates[0]
+        pruned[chosen[0], chosen[1]] = False
+    return pruned
+
+
+def _prune_twigs(
+    skel: np.ndarray,
+    signal_crop: np.ndarray | None,
+    pixel_size_um: float,
+    min_branch_length_um: float,
+    min_branch_signal: float,
+) -> np.ndarray:
+    """Iteratively prune endpoint-terminated branches that fail BOTH the
+    length test AND the signal test.
+
+    A twig (type-1 branch: endpoint → branchpoint) is pruned only when
+    every "armed" threshold fails:
+
+      armed_length:  min_branch_length_um > 0
+                     fails when length < min_branch_length_um
+      armed_signal:  min_branch_signal > 0 AND signal_crop available
+                     fails when mean(signal along branch) < min_branch_signal
+
+    A short branch is kept if it's bright; a dim branch is kept if it's
+    long. Setting either threshold to 0 disables that criterion entirely.
+    Both at 0 → no-op.
+    """
+    if min_branch_length_um <= 0 and min_branch_signal <= 0:
         return skel
     from skan import Skeleton, summarize
+
+    use_signal = signal_crop is not None and min_branch_signal > 0
 
     pruned = skel.copy()
     for _ in range(_PRUNE_MAX_ITER):
@@ -97,16 +172,24 @@ def _prune_short_twigs(
         for i in range(n_paths):
             btype = int(summary["branch_type"].iloc[i])
             if btype != 1:
-                continue  # only prune endpoint -> branchpoint twigs
-            if float(lengths[i]) >= float(min_branch_length_um):
-                continue
+                continue  # only prune endpoint → branchpoint twigs
+            length = float(lengths[i])
             path = np.asarray(obj.path_coordinates(i)).astype(np.int64)
+
+            armed_failures: list[bool] = []
+            if min_branch_length_um > 0:
+                armed_failures.append(length < float(min_branch_length_um))
+            if use_signal:
+                mean_sig = float(signal_crop[path[:, 0], path[:, 1]].mean())
+                armed_failures.append(mean_sig < float(min_branch_signal))
+            if not armed_failures or not all(armed_failures):
+                continue
+
             sy, sx = int(path[0, 0]), int(path[0, 1])
             ey, ex = int(path[-1, 0]), int(path[-1, 1])
             sd = int(deg[sy, sx])
             ed = int(deg[ey, ex])
             if sd == 1:
-                # Endpoint is at the start; keep the branchpoint end.
                 for r, c in path[:-1]:
                     pruned[int(r), int(c)] = False
                 any_pruned = True
@@ -114,9 +197,6 @@ def _prune_short_twigs(
                 for r, c in path[1:]:
                     pruned[int(r), int(c)] = False
                 any_pruned = True
-            # If neither endpoint has degree 1 in the live skeleton, the
-            # branch has already lost its terminus from a prior step.
-            # Skip — the next iteration will catch any leftover spur.
         if not any_pruned:
             break
     return pruned
@@ -146,6 +226,8 @@ def _skeletonize_one_domain(
     signal_crop: np.ndarray | None = None,
     signal_threshold: float = 0.0,
     min_branch_length_um: float = 0.0,
+    min_branch_signal: float = 0.0,
+    force_tree: bool = True,
 ) -> dict | None:
     """Skeletonize one domain (already cropped to its bbox); return per-cell
     info dict or None if the domain has no skeleton.
@@ -177,8 +259,19 @@ def _skeletonize_one_domain(
         # Treat as a degenerate "soma only" cell with zero branch length.
         return None
 
-    if min_branch_length_um > 0:
-        skel = _prune_short_twigs(skel, pixel_size_um, min_branch_length_um)
+    if force_tree:
+        skel = _break_cycles(skel, signal_crop=signal_crop)
+        if skel.sum() < 2:
+            return None
+
+    if min_branch_length_um > 0 or min_branch_signal > 0:
+        skel = _prune_twigs(
+            skel,
+            signal_crop=signal_crop,
+            pixel_size_um=pixel_size_um,
+            min_branch_length_um=min_branch_length_um,
+            min_branch_signal=min_branch_signal,
+        )
         if skel.sum() < 2:
             return None
 
@@ -239,6 +332,8 @@ def skeletonize_domains(
     signal: np.ndarray | None = None,
     signal_threshold: float = 0.0,
     min_branch_length_um: float = 0.0,
+    min_branch_signal: float = 0.0,
+    force_tree: bool = True,
 ) -> tuple[dict[int, dict], np.ndarray]:
     """Skeletonize every domain in ``domain_labels`` and return per-domain
     info dicts plus a combined skeleton label image.
@@ -281,11 +376,9 @@ def skeletonize_domains(
         seed_y, seed_x = seed_positions[k_int]
         seed_in_crop = (seed_y - sl_y.start, seed_x - sl_x.start)
 
-        signal_crop = (
-            signal[sl_y, sl_x]
-            if signal is not None and signal_threshold > 0
-            else None
-        )
+        # Always crop the signal if we have it — force_tree and the new
+        # min_branch_signal both need it, not just signal_threshold > 0.
+        signal_crop = signal[sl_y, sl_x] if signal is not None else None
         result = _skeletonize_one_domain(
             mask_full[sl_y, sl_x],
             seed_in_crop,
@@ -293,6 +386,8 @@ def skeletonize_domains(
             signal_crop=signal_crop,
             signal_threshold=signal_threshold,
             min_branch_length_um=min_branch_length_um,
+            min_branch_signal=min_branch_signal,
+            force_tree=force_tree,
         )
         if result is None:
             continue

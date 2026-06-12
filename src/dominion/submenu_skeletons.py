@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .skeletonize import skeletonize_domains
 from .state import AppState
@@ -71,11 +77,21 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     signal_trace_slider = HistogramSlider(
         "Min signal for tracing", 0.0, 1.0, step=1.0, value=0.0, decimals=1
     )
-    # Twig pruning: iteratively remove endpoint-terminated branches shorter
-    # than this threshold. 0 = no pruning (raw skeletonize output).
+    # Geometric twig pruning. 0 = disabled.
     min_branch_slider = NumericSlider(
         "Min branch length (µm)", 0.0, 20.0, step=0.1, value=0.0, decimals=1
     )
+    # Intensity-aware twig pruning. A twig is pruned only when both this
+    # AND the length criterion fail — so a short bright branch survives.
+    # 0 = disabled.
+    min_branch_signal_slider = HistogramSlider(
+        "Min branch signal", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+    )
+    # Tree-topology enforcement. Astrocyte filaments are tree-like — when
+    # ON, post-skeletonize we break cycles by dropping the dimmest pixel
+    # per cycle.
+    force_tree_checkbox = QCheckBox("Force tree topology (no loops)")
+    force_tree_checkbox.setChecked(True)
 
     run_button = QPushButton("Run skeletonization")
     summary_label = QLabel("No tessellation yet.")
@@ -84,6 +100,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
     layout.addWidget(signal_trace_slider)
     layout.addWidget(min_branch_slider)
+    layout.addWidget(min_branch_signal_slider)
+    layout.addWidget(force_tree_checkbox)
     layout.addWidget(run_button)
     layout.addWidget(summary_label)
     section.set_content(content)
@@ -133,6 +151,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
 
         signal_threshold = float(signal_trace_slider.value())
         min_branch_length_um = float(min_branch_slider.value())
+        min_branch_signal = float(min_branch_signal_slider.value())
+        force_tree = bool(force_tree_checkbox.isChecked())
         run_button.setEnabled(False)
         summary_label.setText("Running skeletonization...")
         try:
@@ -140,9 +160,13 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 state.tessellation.domain_labels,
                 seeds,
                 state.image.pixel_size_um,
-                signal=state.image.signal if signal_threshold > 0 else None,
+                # Always pass the signal — force_tree + min_branch_signal
+                # both consume it, not just signal_threshold > 0.
+                signal=state.image.signal,
                 signal_threshold=signal_threshold,
                 min_branch_length_um=min_branch_length_um,
+                min_branch_signal=min_branch_signal,
+                force_tree=force_tree,
             )
         finally:
             run_button.setEnabled(True)
@@ -155,6 +179,8 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
                 params={
                     "signal_threshold": signal_threshold,
                     "min_branch_length_um": min_branch_length_um,
+                    "min_branch_signal": min_branch_signal,
+                    "force_tree": force_tree,
                 },
             ),
         )
@@ -213,6 +239,10 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
             signal_trace_slider.set_range(0.0, max(upper, 1.0), step=1.0)
             signal_trace_slider.set_data(sig_in_tissue, bins=100)
             signal_trace_slider.set_value(0.0)
+            # The branch-signal slider uses the same in-tissue distribution.
+            min_branch_signal_slider.set_range(0.0, max(upper, 1.0), step=1.0)
+            min_branch_signal_slider.set_data(sig_in_tissue, bins=100)
+            min_branch_signal_slider.set_value(0.0)
         finally:
             suppress["on"] = False
 
