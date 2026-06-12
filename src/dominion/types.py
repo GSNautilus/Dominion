@@ -50,6 +50,33 @@ class TessellationResult:
 
 
 @dataclass
+class SkeletonsResult:
+    """Per-domain skeleton extraction.
+
+    Each entry in ``per_domain`` describes one cell's skeleton:
+
+    * ``branch_paths``: list of ``(M, 2)`` int arrays of (row, col) pixel
+      coords, one per branch in the skeleton graph.
+    * ``branch_lengths_um``: array of branch lengths in microns,
+      same order as ``branch_paths``.
+    * ``branch_types``: array of skan branch-type codes
+      (0=endpoint→endpoint, 1=endpoint→branch, 2=branch→branch, 3=loop).
+    * ``root_rc``: (row, col) of the skeleton pixel chosen as the tree
+      root (nearest skeleton pixel to the seed, in pixel coords).
+    * ``total_length_um``, ``n_branches``, ``n_endpoints``,
+      ``n_branchpoints``: scalar summaries.
+
+    ``skeleton_label_image`` is a 2D int32 image where each skeleton
+    pixel carries the domain ID it belongs to (0 = not on any skeleton).
+    Convenient for a napari Labels overlay.
+    """
+
+    per_domain: dict[int, dict]              # {domain_id: {...}}
+    skeleton_label_image: np.ndarray          # 2D int32
+    params: dict
+
+
+@dataclass
 class MeasurementsResult:
     """Per-domain measurements across one or more channels.
 
