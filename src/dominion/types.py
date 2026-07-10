@@ -16,11 +16,27 @@ from typing import Optional
 import numpy as np
 
 
+def _derive_tissue_mask(
+    signal: np.ndarray,
+    nuclei: Optional[np.ndarray],
+    roi_mask: Optional[np.ndarray],
+) -> np.ndarray:
+    """The set of pixels the pipeline considers eligible.
+
+    Any non-zero signal (or nuclei, when present) qualifies; if an ROI is
+    active, the final tissue mask is intersected with it.
+    """
+    base = (signal > 0) if nuclei is None else ((signal > 0) | (nuclei > 0))
+    if roi_mask is None:
+        return base
+    return base & roi_mask
+
+
 @dataclass
 class ImageData:
     signal: np.ndarray            # 2D, currently designated signal channel
     nuclei: Optional[np.ndarray]  # 2D, currently designated nuclei channel (or None)
-    tissue_mask: np.ndarray       # 2D bool, derived from the current signal + nuclei
+    tissue_mask: np.ndarray       # 2D bool, signal+nuclei positive AND (if active) inside ROI
     pixel_size_um: float
     source_path: Path
     # Channels NOT currently designated as signal or nuclei. Keyed by
@@ -32,15 +48,19 @@ class ImageData:
     all_channels: dict[str, np.ndarray] = field(default_factory=dict)
     signal_channel_name: str = "channel_0"
     nuclei_channel_name: Optional[str] = None
+    # Optional user-drawn region-of-interest. None means "analyze the
+    # entire signal-positive tissue". When set, this bool array must
+    # match ``signal.shape``; the pipeline restricts every stage to its
+    # intersection with the signal/nuclei footprint.
+    roi_mask: Optional[np.ndarray] = None
 
     def with_channel_assignment(
         self, signal_name: str, nuclei_name: Optional[str]
     ) -> "ImageData":
         """Return a new ImageData with different signal / nuclei designations.
 
-        Rebuilds ``extra_channels`` and ``tissue_mask`` from ``all_channels``.
-        Everything else (pixel size, source path, all_channels itself) is
-        carried over.
+        Preserves the ROI (if any) — swapping channels doesn't invalidate a
+        user-drawn region.
         """
         if signal_name not in self.all_channels:
             raise ValueError(
@@ -59,19 +79,32 @@ class ImageData:
             for name, arr in self.all_channels.items()
             if name != signal_name and (nuclei_name is None or name != nuclei_name)
         }
-        tissue_mask = (
-            (signal > 0) if nuclei is None else ((signal > 0) | (nuclei > 0))
-        )
         return ImageData(
             signal=signal,
             nuclei=nuclei,
-            tissue_mask=tissue_mask,
+            tissue_mask=_derive_tissue_mask(signal, nuclei, self.roi_mask),
             pixel_size_um=self.pixel_size_um,
             source_path=self.source_path,
             extra_channels=extras,
             all_channels=self.all_channels,
             signal_channel_name=signal_name,
             nuclei_channel_name=nuclei_name,
+            roi_mask=self.roi_mask,
+        )
+
+    def with_roi_mask(self, roi_mask: Optional[np.ndarray]) -> "ImageData":
+        """Return a new ImageData with a different ROI (or no ROI)."""
+        return ImageData(
+            signal=self.signal,
+            nuclei=self.nuclei,
+            tissue_mask=_derive_tissue_mask(self.signal, self.nuclei, roi_mask),
+            pixel_size_um=self.pixel_size_um,
+            source_path=self.source_path,
+            extra_channels=self.extra_channels,
+            all_channels=self.all_channels,
+            signal_channel_name=self.signal_channel_name,
+            nuclei_channel_name=self.nuclei_channel_name,
+            roi_mask=roi_mask,
         )
 
 
