@@ -21,6 +21,7 @@ from . import (
     submenu_batch,
     submenu_channels,
     submenu_measurements,
+    submenu_roi,
     submenu_skeletons,
     submenu_sholl,
 )
@@ -86,6 +87,7 @@ def build_dock_widget(
 
     layout.addWidget(_build_header())
     layout.addWidget(submenu_channels.build_widget(state, viewer))
+    layout.addWidget(submenu_roi.build_widget(state, viewer))
 
     if mode == "nuclei":
         layout.addWidget(submenu1_nuclei.build_widget(state, viewer))
