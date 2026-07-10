@@ -19,6 +19,7 @@ from . import (
     submenu3_tessellation,
     submenu_a_signal_seeds,
     submenu_batch,
+    submenu_channels,
     submenu_measurements,
     submenu_skeletons,
     submenu_sholl,
@@ -84,6 +85,7 @@ def build_dock_widget(
     layout.setSpacing(6)
 
     layout.addWidget(_build_header())
+    layout.addWidget(submenu_channels.build_widget(state, viewer))
 
     if mode == "nuclei":
         layout.addWidget(submenu1_nuclei.build_widget(state, viewer))

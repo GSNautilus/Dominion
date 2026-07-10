@@ -74,20 +74,27 @@ def load_image(path: Path) -> ImageData:
         desc_tag = page.tags.get("ImageDescription", None)
         description = desc_tag.value if desc_tag is not None else None
 
-    extra_channels: dict[str, np.ndarray] = {}
+    all_channels: dict[str, np.ndarray] = {}
     if arr.ndim == 2:
-        signal = arr
-        nuclei = None
+        all_channels["channel_0"] = arr
     elif arr.ndim == 3 and arr.shape[0] >= 1:
-        signal = arr[0]
-        nuclei = arr[1] if arr.shape[0] >= 2 else None
-        for ch_idx in range(2, arr.shape[0]):
-            extra_channels[f"channel_{ch_idx}"] = arr[ch_idx]
+        for ch_idx in range(arr.shape[0]):
+            all_channels[f"channel_{ch_idx}"] = arr[ch_idx]
     else:
         raise ValueError(
             f"Expected a 2D single-channel TIFF or a 3D CYX TIFF, "
             f"got shape {arr.shape}"
         )
+
+    # Default assignment: channel_0 = signal, channel_1 = nuclei (if present).
+    signal_name = "channel_0"
+    nuclei_name = "channel_1" if "channel_1" in all_channels else None
+    signal = all_channels[signal_name]
+    nuclei = all_channels[nuclei_name] if nuclei_name is not None else None
+    extra_channels = {
+        n: v for n, v in all_channels.items()
+        if n != signal_name and (nuclei_name is None or n != nuclei_name)
+    }
 
     # Resolve pixel size.
     pixel_size_um = 1.0
@@ -133,4 +140,7 @@ def load_image(path: Path) -> ImageData:
         pixel_size_um=pixel_size_um,
         source_path=path,
         extra_channels=extra_channels,
+        all_channels=all_channels,
+        signal_channel_name=signal_name,
+        nuclei_channel_name=nuclei_name,
     )

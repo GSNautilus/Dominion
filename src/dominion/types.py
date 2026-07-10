@@ -18,15 +18,61 @@ import numpy as np
 
 @dataclass
 class ImageData:
-    signal: np.ndarray            # 2D, immunolabel-of-interest channel
-    nuclei: Optional[np.ndarray]  # 2D, optional nuclei-stain channel
-    tissue_mask: np.ndarray       # 2D bool
+    signal: np.ndarray            # 2D, currently designated signal channel
+    nuclei: Optional[np.ndarray]  # 2D, currently designated nuclei channel (or None)
+    tissue_mask: np.ndarray       # 2D bool, derived from the current signal + nuclei
     pixel_size_um: float
     source_path: Path
-    # Channels beyond signal + nuclei. Keyed by display name (e.g.
-    # "channel_2"); each value is a 2D array of the same (H, W) shape as
-    # ``signal``. Empty dict for 1- and 2-channel TIFFs.
+    # Channels NOT currently designated as signal or nuclei. Keyed by
+    # display name. Empty dict for 1- and 2-channel TIFFs at defaults.
     extra_channels: dict[str, np.ndarray] = field(default_factory=dict)
+    # Every channel present in the source TIFF, keyed by display name
+    # ("channel_0", "channel_1", ...). Never mutated; used by the
+    # Channels submenu to produce swapped assignments.
+    all_channels: dict[str, np.ndarray] = field(default_factory=dict)
+    signal_channel_name: str = "channel_0"
+    nuclei_channel_name: Optional[str] = None
+
+    def with_channel_assignment(
+        self, signal_name: str, nuclei_name: Optional[str]
+    ) -> "ImageData":
+        """Return a new ImageData with different signal / nuclei designations.
+
+        Rebuilds ``extra_channels`` and ``tissue_mask`` from ``all_channels``.
+        Everything else (pixel size, source path, all_channels itself) is
+        carried over.
+        """
+        if signal_name not in self.all_channels:
+            raise ValueError(
+                f"Unknown signal channel {signal_name!r}; "
+                f"available: {list(self.all_channels)}"
+            )
+        if nuclei_name is not None and nuclei_name not in self.all_channels:
+            raise ValueError(
+                f"Unknown nuclei channel {nuclei_name!r}; "
+                f"available: {list(self.all_channels)}"
+            )
+        signal = self.all_channels[signal_name]
+        nuclei = self.all_channels[nuclei_name] if nuclei_name is not None else None
+        extras = {
+            name: arr
+            for name, arr in self.all_channels.items()
+            if name != signal_name and (nuclei_name is None or name != nuclei_name)
+        }
+        tissue_mask = (
+            (signal > 0) if nuclei is None else ((signal > 0) | (nuclei > 0))
+        )
+        return ImageData(
+            signal=signal,
+            nuclei=nuclei,
+            tissue_mask=tissue_mask,
+            pixel_size_um=self.pixel_size_um,
+            source_path=self.source_path,
+            extra_channels=extras,
+            all_channels=self.all_channels,
+            signal_channel_name=signal_name,
+            nuclei_channel_name=nuclei_name,
+        )
 
 
 @dataclass
