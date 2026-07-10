@@ -6,18 +6,10 @@ import argparse
 from pathlib import Path
 
 import napari
-import numpy as np
 
 from dominion.app import MODES, build_dock_widget
 from dominion.io import load_image
 from dominion.state import AppState
-
-
-def _auto_contrast_limits(arr: np.ndarray) -> tuple[float, float]:
-    lo, hi = np.percentile(arr, (1.0, 99.5))
-    if hi <= lo:
-        hi = lo + 1.0
-    return float(lo), float(hi)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -50,39 +42,9 @@ def main(argv: list[str] | None = None) -> None:
 
     viewer = napari.Viewer()
 
-    scale = (image.pixel_size_um, image.pixel_size_um)
-
-    viewer.add_image(
-        image.signal,
-        name="Signal",
-        colormap="green",
-        blending="additive",
-        contrast_limits=_auto_contrast_limits(image.signal),
-        scale=scale,
-    )
-    if image.nuclei is not None:
-        viewer.add_image(
-            image.nuclei,
-            name="Nuclei",
-            colormap="blue",
-            blending="additive",
-            contrast_limits=_auto_contrast_limits(image.nuclei),
-            scale=scale,
-        )
-    # Extra channels (beyond signal + nuclei) are cycled through a small
-    # palette so they're visually distinguishable in the viewer.
-    _extra_colormaps = ("magenta", "yellow", "cyan", "red", "gray")
-    for i, (name, arr) in enumerate(image.extra_channels.items()):
-        viewer.add_image(
-            arr,
-            name=name,
-            colormap=_extra_colormaps[i % len(_extra_colormaps)],
-            blending="additive",
-            contrast_limits=_auto_contrast_limits(arr),
-            scale=scale,
-            visible=False,  # off by default to avoid clutter
-        )
-
+    # The Channels submenu owns the Signal / Nuclei / extra image layers —
+    # they get created (or refreshed) inside its image-change subscription,
+    # so a channel swap in the UI keeps the layers in sync.
     dock = build_dock_widget(state, viewer, mode=args.mode)
     viewer.window.add_dock_widget(
         dock, name=f"DOMINION ({args.mode})", area="right"
