@@ -1,0 +1,21 @@
+# DOMINION — Full environment (adds StarDist nuclei mode).
+#
+# TensorFlow 2.10 is the last native-Windows build with GPU/CUDA support, and
+# it requires Python 3.10. The GPU build string lives on the Anaconda
+# "defaults" channel. The installer creates this environment and then
+# pip-installs DOMINION with its [nuclei] extra (stardist, csbdeep).
+#
+# For a CPU-only machine, replace the tensorflow line below with:
+#     - tensorflow=2.10.0
+# (StarDist on CPU is minutes, not seconds, on large images.)
+#
+# You normally do not run this file by hand — double-click
+# "installers\Install DOMINION (Full).bat" instead.
+name: dominion
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - tensorflow=2.10.0=gpu_py310*

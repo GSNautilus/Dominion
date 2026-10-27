@@ -1,0 +1,14 @@
+# DOMINION — Basic environment (default signal-mode pipeline).
+#
+# No TensorFlow, no GPU, no version locks beyond a modern Python. The
+# installer creates this environment and then pip-installs DOMINION into it,
+# which pulls in the core dependencies (numpy, scikit-image, napari, ...).
+#
+# You normally do not run this file by hand — double-click
+# "installers\Install DOMINION (Basic).bat" instead.
+name: dominion
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip

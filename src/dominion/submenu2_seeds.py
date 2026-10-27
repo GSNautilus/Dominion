@@ -108,16 +108,34 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.setSpacing(4)
 
     t_slider = HistogramSlider(
-        "Signal threshold T", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+        "Signal threshold T", 0.0, 1.0, step=1.0, value=0.0, decimals=1,
+        tooltip=(
+            "Minimum signal intensity a pixel must have to count toward a "
+            "nucleus's object-likeness score. Pixels below T are ignored. "
+            "Changing this recomputes scores (click Run)."
+        ),
     )
     r_slider = NumericSlider(
-        "Search radius R (µm)", 1.0, 50.0, step=0.5, value=10.0, decimals=1
+        "Search radius R (µm)", 1.0, 50.0, step=0.5, value=10.0, decimals=1,
+        tooltip=(
+            "Radius of the disc around each nucleus centroid over which the "
+            "object-likeness score is accumulated, in microns. Recomputes "
+            "scores (click Run)."
+        ),
     )
     alpha_slider = NumericSlider(
-        "Intensity ↔ distance weight α", 0.0, 1.0, step=0.01, value=0.5, decimals=2
+        "Intensity ↔ distance weight α", 0.0, 1.0, step=0.01, value=0.5, decimals=2,
+        tooltip=(
+            "Balances the two score ingredients: 1 = signal intensity only, "
+            "0 = proximity to the centroid only. Recomputes scores (click Run)."
+        ),
     )
     theta_slider = HistogramSlider(
-        "Seed threshold θ", 0.0, 1.0, step=0.001, value=0.0, decimals=3
+        "Seed threshold θ", 0.0, 1.0, step=0.001, value=0.0, decimals=3,
+        tooltip=(
+            "Keep nuclei whose object-likeness score is at least θ; the rest "
+            "are rejected as non-objects. Live filter — no Run needed."
+        ),
     )
     run_button = QPushButton("Run classification")
     summary_label = QLabel("No nuclei yet.")

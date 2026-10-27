@@ -80,39 +80,76 @@ the pipeline. Requires a 2-channel CYX TIFF (signal=channel 0, nuclei=channel 1)
 
 ## Installation
 
-Tested on Windows 11 with NVIDIA GPU. The GPU path uses TensorFlow 2.10
-(the last native-Windows TF version with CUDA support), so the env must be on
-Python 3.10.
+DOMINION comes in two flavours:
 
-```bash
-# Create env with GPU TensorFlow
-conda create -n dominion python=3.10 'tensorflow=2.10.0=gpu_py310*' -c defaults -y
+- **Basic** — the default signal-mode pipeline. No GPU, no TensorFlow; runs on
+  any modern Windows PC.
+- **Full** — Basic *plus* StarDist nuclei detection (`--mode nuclei`). Adds
+  TensorFlow 2.10 and works best with an NVIDIA GPU (CPU works but StarDist is
+  then minutes, not seconds). TensorFlow 2.10 is the last native-Windows build
+  with CUDA support, which is why Full is locked to Python 3.10.
+
+### Easy install (Windows — recommended)
+
+No prior Python, conda, or git knowledge needed.
+
+1. Download the project: on GitHub click **Code ▸ Download ZIP**, then
+   right-click the ZIP ▸ **Extract All**.
+2. Open the extracted folder, then the **`installers`** folder.
+3. Double-click one of:
+   - **`Install DOMINION (Basic).bat`** — easy, no GPU.
+   - **`Install DOMINION (Full).bat`** — adds AI nuclei detection.
+4. Let it finish. If conda isn't already on your PC, the installer downloads a
+   small copy (Miniforge) for you — nothing else to set up.
+5. A **DOMINION** icon appears on your Desktop. Double-click it to start.
+
+To update later, double-click **`Update DOMINION.bat`**. To switch between
+Basic and Full, just run the other installer.
+
+### Manual install (advanced)
+
+Run these from the extracted project folder (the one containing
+`pyproject.toml`), in a PowerShell terminal.
+
+**Basic:**
+
+```powershell
+conda create -n dominion python=3.11 -y
 conda activate dominion
-
-# Pip-install the rest
-pip install stardist csbdeep scikit-image tifffile "napari[all]" pyqtgraph magicgui qtpy
-
-# napari 0.7 ships with PyQt6 by default; on some Windows installs PyQt6's
-# DLLs fail to load. If you hit "QtBindingsNotFoundError", swap to PyQt5:
-pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip
-pip install PyQt5
-
-# Install DOMINION itself (editable)
-git clone https://github.com/GSNautilus/Dominion.git
-cd Dominion
-pip install -e . --no-deps
+pip install .
 ```
 
-CPU-only is supported (skip the conda TF step and install regular `tensorflow`),
-but StarDist inference on multi-megapixel images is then minutes, not seconds.
-Signal mode doesn't need TensorFlow at all and is fast on CPU.
+**Full** (StarDist / nuclei mode):
+
+```powershell
+conda create -n dominion python=3.10 "tensorflow=2.10.0=gpu_py310*" -c defaults -y
+conda activate dominion
+pip install ".[nuclei]"
+
+# napari may install PyQt6, whose DLLs fail to load on some Windows machines
+# ("QtBindingsNotFoundError"). If that happens, swap to PyQt5:
+pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip
+pip install PyQt5
+```
+
+For a CPU-only Full install, replace the `tensorflow=2.10.0=gpu_py310*` spec
+with `tensorflow=2.10.0`.
 
 ## Usage
 
-```bash
-python scripts/run_dominion.py path/to/image.tif                  # signal mode (default)
-python scripts/run_dominion.py path/to/image.tif --mode nuclei    # nuclei-guided mode
+Easiest: double-click the **DOMINION** Desktop icon (or
+`installers\Launch DOMINION.bat`). A file-open dialog asks you to pick an
+image, and the app opens in signal mode.
+
+From a terminal, in the `dominion` environment:
+
+```powershell
+dominion                                       # pick an image via dialog (signal mode)
+dominion C:\path\to\image.tif                  # signal mode on a specific file
+dominion C:\path\to\image.tif --mode nuclei    # nuclei mode (Full install only)
 ```
+
+(The older `python scripts\run_dominion.py <image>` form still works too.)
 
 Accepted input formats:
 
@@ -171,13 +208,17 @@ src/dominion/
   cache.py                       # per-image cache directory + npz load/save
   seedfind.py                    # pure signal-only seed-finding algorithms
   app.py                         # build_dock_widget(state, viewer, mode='signal')
+  cli.py                         # launch entry point: args/file-dialog -> napari
+  capabilities.py                # detects the optional StarDist/TF (Full) stack
   widgets/common.py              # NumericSlider, HistogramSlider, CollapsibleSection
   submenu1_nuclei.py             # nuclei mode stage 1: StarDist nuclei
   submenu2_seeds.py              # nuclei mode stage 2: signal-based classification
   submenu3_tessellation.py       # both modes: signal-guided watershed
   submenu_a_signal_seeds.py      # signal mode stage 1: direct peak-finding
 scripts/
-  run_dominion.py                # CLI entry: loads image, builds app, runs napari
+  run_dominion.py                # thin wrapper around dominion.cli:main
+installers/
+  Install DOMINION (Basic|Full).bat, Launch/Update .bat + .ps1 scripts
 ```
 
 State flows along a fixed chain: `image → nuclei → seeds → tessellation`.
@@ -188,7 +229,7 @@ populates `nuclei` with synthetic centroids (the peak coordinates) and
 `seeds` with all indices kept.
 
 `app.build_dock_widget(state, viewer, mode=...)` is the future-plugin entry
-point. The CLI script (`scripts/run_dominion.py`) is the only filesystem
+point. The CLI module (`dominion/cli.py`) is the only filesystem
 consumer; everything else takes pre-loaded `ImageData` via `AppState`. A
 future napari plugin would call `build_dock_widget` directly.
 

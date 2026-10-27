@@ -33,7 +33,11 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.setSpacing(4)
 
     spacing_slider = NumericSlider(
-        "Ring spacing (µm)", 0.5, 50.0, step=0.5, value=5.0, decimals=1
+        "Ring spacing (µm)", 0.5, 50.0, step=0.5, value=5.0, decimals=1,
+        tooltip=(
+            "Spacing between the concentric Sholl rings, in microns. Smaller "
+            "spacing gives a finer intersection profile but more rings."
+        ),
     )
     run_button = QPushButton("Run Sholl analysis")
     summary_label = QLabel("No skeletons yet.")

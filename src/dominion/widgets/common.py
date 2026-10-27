@@ -90,6 +90,7 @@ class NumericSlider(QWidget):
         value: float,
         *,
         decimals: int = 2,
+        tooltip: str = "",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -111,6 +112,9 @@ class NumericSlider(QWidget):
         self._spin = QDoubleSpinBox(self)
         self._spin.setDecimals(self._decimals)
 
+        if tooltip:
+            self.setToolTip(tooltip)
+
         self._configure_range()
         self._slider.valueChanged.connect(self._on_slider)
         self._spin.valueChanged.connect(self._on_spin)
@@ -124,6 +128,18 @@ class NumericSlider(QWidget):
         self.set_value(float(value))
 
     # -- public API ----------------------------------------------------
+
+    def setToolTip(self, tip: str) -> None:  # noqa: N802 (Qt casing)
+        """Apply the tooltip to the label, slider, and spinbox too.
+
+        Qt does not fall back to a parent widget's tooltip when the cursor
+        is over a child that has none, so set it on each control to make
+        hovering anywhere in the row show the help text.
+        """
+        super().setToolTip(tip)
+        self._label.setToolTip(tip)
+        self._slider.setToolTip(tip)
+        self._spin.setToolTip(tip)
 
     def value(self) -> float:
         return float(self._spin.value())
@@ -212,6 +228,7 @@ class HistogramSlider(QWidget):
         value: float,
         *,
         decimals: int = 2,
+        tooltip: str = "",
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -237,7 +254,16 @@ class HistogramSlider(QWidget):
         layout.addWidget(self._slider)
         layout.addWidget(self._plot)
 
+        if tooltip:
+            self.setToolTip(tooltip)
+
     # -- public API ----------------------------------------------------
+
+    def setToolTip(self, tip: str) -> None:  # noqa: N802 (Qt casing)
+        """Propagate the tooltip to the slider row and the histogram plot."""
+        super().setToolTip(tip)
+        self._slider.setToolTip(tip)
+        self._plot.setToolTip(tip)
 
     def value(self) -> float:
         return self._slider.value()

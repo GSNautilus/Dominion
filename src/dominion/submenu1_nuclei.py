@@ -16,6 +16,7 @@ import numpy as np
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .cache import cache_path, load_npz, save_npz
+from .capabilities import NUCLEI_UNAVAILABLE_MESSAGE, has_nuclei_support
 from .state import AppState
 from .types import NucleiResult
 from .widgets.common import CollapsibleSection, NumericSlider
@@ -166,8 +167,22 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(4)
 
-    prob_slider = NumericSlider("prob_thresh", 0.0, 1.0, step=0.01, value=0.5)
-    nms_slider = NumericSlider("nms_thresh", 0.0, 1.0, step=0.01, value=0.4)
+    prob_slider = NumericSlider(
+        "prob_thresh", 0.0, 1.0, step=0.01, value=0.5,
+        tooltip=(
+            "StarDist object-probability threshold. Higher keeps only "
+            "confident detections (fewer nuclei); lower detects more, "
+            "including faint or spurious ones."
+        ),
+    )
+    nms_slider = NumericSlider(
+        "nms_thresh", 0.0, 1.0, step=0.01, value=0.4,
+        tooltip=(
+            "StarDist non-maximum-suppression (overlap) threshold. Higher "
+            "allows more overlap between adjacent nuclei; lower suppresses "
+            "overlapping detections more aggressively."
+        ),
+    )
     run_button = QPushButton("Run StarDist")
     status_label = QLabel("Idle")
     status_label.setWordWrap(False)
@@ -178,6 +193,17 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     layout.addWidget(status_label)
 
     section.set_content(body)
+
+    # On a Basic install (no StarDist/TensorFlow), make this stage inert with
+    # a clear explanation instead of letting Run raise an ImportError.
+    _nuclei_ok = has_nuclei_support()
+    if not _nuclei_ok:
+        run_button.setEnabled(False)
+        prob_slider.setEnabled(False)
+        nms_slider.setEnabled(False)
+        run_button.setToolTip(NUCLEI_UNAVAILABLE_MESSAGE)
+        status_label.setToolTip(NUCLEI_UNAVAILABLE_MESSAGE)
+        status_label.setText("Needs the Full install (StarDist)")
 
     # Mutable container so nested callbacks can stash the active worker.
     worker_holder: dict[str, object] = {}
@@ -213,6 +239,9 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         )
 
     def _on_run_clicked() -> None:
+        if not _nuclei_ok:
+            _set_status("Nuclei detection needs the Full install")
+            return
         image = state.image
         if image is None:
             _set_status("No image loaded")

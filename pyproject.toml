@@ -8,6 +8,8 @@ version = "0.2.0"
 description = "DOMINION: tessellation of object domains from 2D immunofluorescence images."
 requires-python = ">=3.10"
 authors = [{ name = "DOMINION authors" }]
+# Core ("Basic") dependencies — no TensorFlow, no GPU. These alone give the
+# default signal-mode pipeline and run on essentially any machine.
 dependencies = [
     "numpy",
     "scikit-image",
@@ -16,15 +18,22 @@ dependencies = [
     "pyqtgraph",
     "magicgui",
     "qtpy",
-    "stardist",
-    "csbdeep",
-    "tensorflow",
     "skan",
     "networkx",
 ]
 
+[project.optional-dependencies]
+# The "Full" extra: StarDist nuclei segmentation (nuclei mode). Pulls in
+# TensorFlow, which on native Windows is pinned to 2.10 for GPU/CUDA support
+# (see README). Install with: pip install "dominion[nuclei]"
+nuclei = [
+    "stardist",
+    "csbdeep",
+    "tensorflow",
+]
+
 [project.scripts]
-dominion = "dominion.app:main"
+dominion = "dominion.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

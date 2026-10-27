@@ -70,26 +70,48 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     method_layout.setContentsMargins(0, 0, 0, 0)
     method_layout.addWidget(QLabel("Method:"))
     method_combo = QComboBox()
+    method_combo.setToolTip(
+        "How seeds are detected: peaks of the smoothed signal itself, or "
+        "peaks of the distance transform of the thresholded signal (better "
+        "for splitting touching blobs)."
+    )
     for m in _METHODS:
         method_combo.addItem(m)
     method_layout.addWidget(method_combo, 1)
 
     # --- Run-gated sliders ---
     sigma_slider = NumericSlider(
-        "Smoothing σ (µm)", 0.0, 20.0, step=0.1, value=5.0, decimals=1
+        "Smoothing σ (µm)", 0.0, 20.0, step=0.1, value=5.0, decimals=1,
+        tooltip=(
+            "Gaussian blur applied to the signal before peak detection, in "
+            "microns. Larger values merge nearby peaks into a single seed."
+        ),
     )
     threshold_slider = HistogramSlider(
-        "Signal threshold", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+        "Signal threshold", 0.0, 1.0, step=1.0, value=0.0, decimals=1,
+        tooltip=(
+            "Signal intensity below which pixels are ignored during "
+            "seed-finding. Raise it to exclude dim background."
+        ),
     )
     min_dist_slider = NumericSlider(
-        "Min peak distance (µm)", 1.0, 100.0, step=0.5, value=15.0, decimals=1
+        "Min peak distance (µm)", 1.0, 100.0, step=0.5, value=15.0, decimals=1,
+        tooltip=(
+            "Minimum allowed spacing between two seeds, in microns. Prevents "
+            "several seeds landing on one object."
+        ),
     )
 
     run_button = QPushButton("Run seed-finding")
 
     # --- Live filter (active after first Run) ---
     peak_strength_slider = HistogramSlider(
-        "Min peak intensity", 0.0, 1.0, step=0.001, value=0.0, decimals=3
+        "Min peak intensity", 0.0, 1.0, step=0.001, value=0.0, decimals=3,
+        tooltip=(
+            "Post-Run filter: discard seeds whose peak strength (intensity, "
+            "or distance-transform depth) is below this. Adjust live without "
+            "re-running."
+        ),
     )
 
     summary_label = QLabel("No image yet.")
