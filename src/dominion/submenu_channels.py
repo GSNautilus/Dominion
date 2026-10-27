@@ -69,7 +69,15 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
         return row
 
     signal_combo = QComboBox()
+    signal_combo.setToolTip(
+        "Which image channel holds the immunolabelled signal (e.g. GFAP) "
+        "that defines the objects to seed and tessellate."
+    )
     nuclei_combo = QComboBox()
+    nuclei_combo.setToolTip(
+        "Which channel holds the nuclear stain (e.g. DAPI), used by the "
+        "nuclei-guided pipeline. Leave unset for signal-only analysis."
+    )
     layout.addWidget(_row("Signal:", signal_combo))
     layout.addWidget(_row("Nuclei:", nuclei_combo))
     section.set_content(content)

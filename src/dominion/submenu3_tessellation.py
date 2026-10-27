@@ -183,18 +183,43 @@ def build_widget(state: AppState, viewer: "napari.Viewer") -> QWidget:
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(4)
 
-    signal_slider = NumericSlider("Signal influence", 0.0, 1.0, step=0.01, value=0.5)
+    signal_slider = NumericSlider(
+        "Signal influence", 0.0, 1.0, step=0.01, value=0.5,
+        tooltip=(
+            "How much the signal brightness (vs. plain distance from the "
+            "seed) steers where domain boundaries fall: 1 = follow the "
+            "signal, 0 = distance only (Voronoi-like)."
+        ),
+    )
     sigma_slider = NumericSlider(
-        "Smoothing σ (µm)", 0.0, 10.0, step=0.1, value=2.0, decimals=1
+        "Smoothing σ (µm)", 0.0, 10.0, step=0.1, value=2.0, decimals=1,
+        tooltip=(
+            "Gaussian smoothing of the signal that guides the watershed, in "
+            "microns. Larger values smooth over texture so boundaries follow "
+            "overall shape."
+        ),
     )
     min_signal_slider = HistogramSlider(
-        "Min signal", 0.0, 1.0, step=1.0, value=0.0, decimals=1
+        "Min signal", 0.0, 1.0, step=1.0, value=0.0, decimals=1,
+        tooltip=(
+            "Pixels whose smoothed signal is below this are excluded from the "
+            "tessellation (treated as background or gaps). 0 = off."
+        ),
     )
     min_area_slider = NumericSlider(
-        "Min domain area (µm²)", 0.0, 5000.0, step=25.0, value=0.0, decimals=0
+        "Min domain area (µm²)", 0.0, 5000.0, step=25.0, value=0.0, decimals=0,
+        tooltip=(
+            "Domains smaller than this (µm²) have their seed dropped and are "
+            "absorbed into neighbours, instead of surviving as slivers. "
+            "0 = off."
+        ),
     )
     max_area_slider = NumericSlider(
-        "Max domain area (µm²)", 0.0, 100000.0, step=500.0, value=0.0, decimals=0
+        "Max domain area (µm²)", 0.0, 100000.0, step=500.0, value=0.0, decimals=0,
+        tooltip=(
+            "Each domain is trimmed to at most this area (µm²), keeping the "
+            "pixels nearest its seed. 0 = off."
+        ),
     )
     run_button = QPushButton("Run tessellation")
     count_label = QLabel("0 domains generated")
