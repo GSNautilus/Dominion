@@ -17,12 +17,14 @@ watershed domains (one color per object) overlaid on the signal channel; here
 Given an immunofluorescence image where one channel labels the objects of
 interest (cells with intermediate-filament markers, membrane markers,
 cytoplasmic markers, etc.), DOMINION partitions the tissue into a per-object
-domain mask. Downstream you can:
+domain mask. From there, the same napari dock lets you:
 
-- count objects per region,
-- assign per-object intensities for any additional channel,
-- extract per-object morphology metrics,
-- describe neighbor relationships between objects.
+- count objects, optionally inside a hand-drawn region of interest,
+- measure per-domain area, shape and intensity statistics for every channel,
+- trace a per-cell skeleton (branch count, length, end/branch points),
+- run per-cell Sholl analysis on those skeletons,
+- export everything as a per-domain CSV plus a one-row per-image summary,
+- save tuned parameters to JSON and reload them on the next image.
 
 The core idea is **tessellation**: many cell populations tile space with
 limited overlap, but their full territories aren't visible in any single
@@ -157,6 +159,9 @@ Accepted input formats:
   mode only.
 - **2-channel CYX TIFF** — channel 0 = signal, channel 1 = nuclei. Works in
   both modes.
+- **N-channel CYX TIFF** — as above, with channels 2 and up kept as extra
+  channels for per-domain intensity measurement. The **Channels** section
+  lets you reassign which channel is signal and which is nuclei.
 
 Non-tissue pixels are expected to be zero (the tissue mask is derived from the
 non-zero footprint of the available channels). Pre-mask non-tissue before
@@ -168,6 +173,20 @@ to 1.0 µm/pixel with a warning — fine for tuning but means slider radii in µ
 don't reflect real distance.
 
 ### Working in the napari dock
+
+The dock is a column of collapsible sections, top to bottom:
+
+| Section | What it does |
+|---|---|
+| **Channels** | Pick which channel is the signal and which is nuclei. |
+| **ROI** | Draw a polygon or rectangle; analysis is restricted to it. |
+| **Signal seed-finding** *(signal mode)* | Find object centers as peaks of the signal. |
+| **Nuclei segmentation** + **Object classification** *(nuclei mode)* | StarDist nuclei, then keep those with enough surrounding signal. |
+| **Tessellation** | Signal-guided seeded watershed: one domain per seed. |
+| **Skeletons** | Per-domain skeleton rooted at the seed; branch metrics via `skan`. |
+| **Sholl analysis** | Ring-intersection profiles per cell (peak, critical radius, AUC, ramification index). |
+| **Measurements** | Per-domain morphology and per-channel intensity; **Export CSV**. |
+| **Batch** | Save / Load every slider value as a JSON settings file. |
 
 Each stage has its own collapsible section with a **Run** button. Downstream
 stages enable when upstream produces a result but don't auto-recompute — you
@@ -201,12 +220,13 @@ in the nuclei pipeline). Cache directories are git-ignored via `*.dominion_cache
 
 ```
 src/dominion/
-  types.py                       # ImageData, NucleiResult, SeedsResult,
-                                 # TessellationResult dataclasses
+  types.py                       # result dataclasses for every pipeline stage
   state.py                       # AppState with subscribe/notify, downstream-clear
   io.py                          # TIFF loading, pixel-size parsing, tissue mask
   cache.py                       # per-image cache directory + npz load/save
   seedfind.py                    # pure signal-only seed-finding algorithms
+  skeletonize.py                 # pure per-domain skeleton extraction
+  sholl.py                       # pure Sholl ring-intersection analysis
   app.py                         # build_dock_widget(state, viewer, mode='signal')
   cli.py                         # launch entry point: args/file-dialog -> napari
   capabilities.py                # detects the optional StarDist/TF (Full) stack
@@ -215,16 +235,23 @@ src/dominion/
   submenu2_seeds.py              # nuclei mode stage 2: signal-based classification
   submenu3_tessellation.py       # both modes: signal-guided watershed
   submenu_a_signal_seeds.py      # signal mode stage 1: direct peak-finding
+  submenu_channels.py            # signal / nuclei channel assignment
+  submenu_roi.py                 # draw-to-restrict region of interest
+  submenu_skeletons.py           # per-domain skeletons
+  submenu_sholl.py               # per-cell Sholl analysis
+  submenu_measurements.py        # per-domain table + CSV export
+  submenu_batch.py               # save / load settings JSON
 scripts/
   run_dominion.py                # thin wrapper around dominion.cli:main
 installers/
   Install DOMINION (Basic|Full).bat, Launch/Update .bat + .ps1 scripts
 ```
 
-State flows along a fixed chain: `image → nuclei → seeds → tessellation`.
-Setting any slot clears all downstream slots and notifies subscribers. Submenus
+State flows along a small dependency graph:
+`image → nuclei → seeds → tessellation → {measurements, skeletons → sholl}`.
+Setting any slot clears everything downstream of it and notifies subscribers. Submenus
 subscribe to the slot they consume; downstream submenus re-enable but don't
-auto-recompute. The chain is identical in both modes — signal mode just
+auto-recompute. The graph is identical in both modes — signal mode just
 populates `nuclei` with synthetic centroids (the peak coordinates) and
 `seeds` with all indices kept.
 
@@ -240,13 +267,10 @@ future napari plugin would call `build_dock_widget` directly.
 - **No ground-truth validation.** No sparse-label or hand-annotated comparison
   is built in. Quality is judged by visual inspection of the napari overlay
   and internal sanity checks (domain count, sizes, no leakage outside tissue).
-- **No batch mode.** One image per invocation; parameters must be tuned in the
-  GUI per image. Saving and reloading slider state is a logical next step but
-  not implemented.
-- **No quantitative export yet.** The pipeline produces `state.tessellation`
-  with per-object domain labels, but no CSV/feature table of per-domain
-  metrics is written to disk. Easy to add — `regionprops_table` on the domain
-  mask gets you area, centroid, intensity stats per object.
+- **No unattended batch processing.** One image per session, and each stage is
+  run by clicking **Run**. Tuned parameters can be saved and reloaded (Batch
+  section), but there is no run-a-whole-folder mode yet. ROIs are not saved
+  with settings.
 - **StarDist needs sensible nucleus scale (nuclei mode only).** Native model
   expects nuclei of ~10–30 px diameter. If your image's pixel size leaves
   nuclei at ~3 px (typical for low-mag tissue overviews), upscale before
@@ -259,6 +283,11 @@ future napari plugin would call `build_dock_widget` directly.
   injury models). The distance-transform method is more robust but still
   threshold-dependent.
 
+## Citing
+
+If DOMINION helps your research, please cite it — GitHub's **Cite this
+repository** button (from [`CITATION.cff`](CITATION.cff)) gives APA and BibTeX.
+
 ## License
 
-See repository.
+[MIT](LICENSE) © Garrick Salois.

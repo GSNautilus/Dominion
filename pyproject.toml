@@ -4,10 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dominion"
-version = "0.2.0"
+version = "0.3.0"
 description = "DOMINION: tessellation of object domains from 2D immunofluorescence images."
 requires-python = ">=3.10"
-authors = [{ name = "DOMINION authors" }]
+authors = [{ name = "Garrick Salois" }]
+license = { text = "MIT" }
+readme = "README.md"
 # Core ("Basic") dependencies — no TensorFlow, no GPU. These alone give the
 # default signal-mode pipeline and run on essentially any machine.
 dependencies = [
@@ -32,11 +34,11 @@ nuclei = [
     "tensorflow",
 ]
 
+[project.urls]
+Repository = "https://github.com/GSNautilus/Dominion"
+
 [project.scripts]
 dominion = "dominion.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-dominion = ["py.typed"]

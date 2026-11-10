@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use DOMINION in your research, please cite it as below."
+title: "DOMINION: Domain Identification for Networks of Immunolabeled Object Neighborhoods"
+abstract: >-
+  A napari workflow that partitions 2D immunofluorescence tissue images into
+  per-object domains by signal-guided seeded watershed tessellation, with
+  per-domain measurements, skeletons and Sholl analysis.
+type: software
+authors:
+  - given-names: Garrick
+    family-names: Salois
+version: 0.3.0
+license: MIT
+repository-code: "https://github.com/GSNautilus/Dominion"
+keywords:
+  - napari
+  - immunofluorescence
+  - image analysis
+  - tessellation
+  - watershed
+  - astrocytes
+  - Sholl analysis
