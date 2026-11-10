@@ -2,8 +2,11 @@
 
 **DOM**ain **I**dentification for **N**etworks of **I**mmunolabeled **O**bject **N**eighborhoods.
 
-A napari-based workflow for quantitatively partitioning tissue into per-object
-domains from 2D immunofluorescence images.
+Dominion is a napari tool for measuring cell morphology and tissue domains in
+immunofluorescence images. It finds each cell, divides the tissue into one domain per cell,
+and measures each domain's area, shape and intensity in every channel. It also traces cell
+skeletons, runs Sholl analysis and exports everything as CSV. I built it for astrocytes (GFAP
+and DAPI), and it works with any marker that is brightest at the cell.
 
 ![DOMINION in signal mode: an immunolabeled tissue section partitioned into per-object domains via signal-guided watershed tessellation.](docs/gfap_mode_tessellation.png)
 
