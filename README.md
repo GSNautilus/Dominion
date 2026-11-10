@@ -12,6 +12,9 @@ seed-finding and tessellation submenus. Center: the napari viewer showing
 watershed domains (one color per object) overlaid on the signal channel; here
 462 detected peaks became 462 object domains.*
 
+**📘 [User manual (PDF)](manual/Dominion_Manual.pdf)**: install, every
+parameter with screenshots, outputs, tuning tips and troubleshooting.
+
 ## What it does
 
 Given an immunofluorescence image where one channel labels the objects of
@@ -105,8 +108,10 @@ No prior Python, conda, or git knowledge needed.
    small copy (Miniforge) for you — nothing else to set up.
 5. A **DOMINION** icon appears on your Desktop. Double-click it to start.
 
-To update later, double-click **`Update DOMINION.bat`**. To switch between
-Basic and Full, just run the other installer.
+To update a ZIP install, download the new ZIP and run the installer again.
+(**`Update DOMINION.bat`** pulls and reinstalls the latest code only in a
+`git clone` of the repository.) To switch between Basic and Full, just run the
+other installer.
 
 ### Manual install (advanced)
 
@@ -282,6 +287,15 @@ future napari plugin would call `build_dock_widget` directly.
   whose signal is broad and lacks a clear peak (e.g. reactive astrocytes in
   injury models). The distance-transform method is more robust but still
   threshold-dependent.
+
+## Manual
+
+[`manual/Dominion_Manual.pdf`](manual/Dominion_Manual.pdf) is built from
+`manual/dominion.html`. `manual/capture.py` takes every screenshot from the
+real app, and `manual/build.py` prints the PDF with Edge. To rebuild after a
+change, run `python manual\build.py` in an environment with `pymupdf`, or
+`python manual\build.py C:\path\to\image.tif` in the Full `dominion`
+environment to retake the screenshots too.
 
 ## Citing
 

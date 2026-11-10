@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DOMINION User Manual</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- =================================================================== COVER -->
+<section class="cover">
+  <div class="top">
+    <img class="logo" src="img/logo.svg" alt="">
+    <div>
+      <div class="kicker">User manual &middot; version 0.3</div>
+      <h1>DOMINION</h1>
+    </div>
+  </div>
+  <div class="acro"><b>DOM</b>ain <b>I</b>dentification for <b>N</b>etworks of <b>I</b>mmunolabeled <b>O</b>bject <b>N</b>eighborhoods</div>
+  <div class="sub">A napari workflow that partitions 2D immunofluorescence images into per-object
+  domains, then measures, skeletonizes and Sholl-profiles every object.</div>
+  <div class="hero">
+    <img src="img/view_tess_minsig0.jpg" alt="Signal-guided domains over a GFAP-stained section">
+    <div class="cap">GFAP signal (green) partitioned into one domain per astrocyte by signal-guided
+    seeded watershed. Yellow dots are the seeds DOMINION found.</div>
+  </div>
+  <div class="foot">
+    <div>Python &middot; napari &middot; scikit-image &middot; StarDist (optional)<br>github.com/GSNautilus/Dominion</div>
+    <div style="text-align:right">&copy; Garrick Salois &middot; MIT License<br>Manual, November 2026</div>
+  </div>
+</section>
+
+<!-- ================================================================ CONTENTS -->
+<section class="toc">
+  <h1>CONTENTS</h1>
+  <p class="intro">Every screenshot in this manual was taken from the real DOMINION dock running in
+  napari, driven by <span class="path">manual\capture.py</span>. The example image is a GFAP + DAPI
+  immunofluorescence section at 0.29&nbsp;&micro;m per pixel.</p>
+  <ol>
+    <li><span class="n">1</span><span class="t">Quick start</span><span class="d">from an image to a CSV in ten minutes</span><span class="pg" data-ref="quick">00</span></li>
+    <li><span class="n">2</span><span class="t">Installing</span><span class="d">Basic or Full; easy installer or by hand</span><span class="pg" data-ref="install">00</span></li>
+    <li><span class="n">3</span><span class="t">How DOMINION works</span><span class="d">why tessellate, the two modes, the dock</span><span class="pg" data-ref="how">00</span></li>
+    <li><span class="n">4</span><span class="t">Images, channels and ROI</span><span class="d">what to feed it, and where to look</span><span class="pg" data-ref="input">00</span></li>
+    <li><span class="n">5</span><span class="t">Signal mode: finding seeds</span><span class="d">one seed per object, from the signal itself</span><span class="pg" data-ref="seeds">00</span></li>
+    <li><span class="n">6</span><span class="t">Nuclei mode: StarDist seeds</span><span class="d">nuclei first, then keep the ones that belong</span><span class="pg" data-ref="nuclei">00</span></li>
+    <li><span class="n">7</span><span class="t">Tessellation</span><span class="d">seeds become domains</span><span class="pg" data-ref="tess">00</span></li>
+    <li><span class="n">8</span><span class="t">Skeletons and Sholl analysis</span><span class="d">per-cell morphology</span><span class="pg" data-ref="morph">00</span></li>
+    <li><span class="n">9</span><span class="t">Measurements and export</span><span class="d">counts, intensities, shape, neighbors</span><span class="pg" data-ref="measure">00</span></li>
+    <li><span class="n">10</span><span class="t">Saving settings</span><span class="d">reuse a tuned pipeline</span><span class="pg" data-ref="batch">00</span></li>
+    <li><span class="n">11</span><span class="t">Choosing parameters</span><span class="d">a tuning order that converges</span><span class="pg" data-ref="tips">00</span></li>
+    <li><span class="n">12</span><span class="t">Troubleshooting</span><span class="d">install, loading, results</span><span class="pg" data-ref="trouble">00</span></li>
+    <li><span class="n">13</span><span class="t">Parameter reference</span><span class="d">every control on two pages</span><span class="pg" data-ref="ref">00</span></li>
+  </ol>
+</section>
+
+<!-- ============================================================= QUICK START -->
+<section class="chapter" id="quick">
+  <header class="sec-head">
+    <div class="num">1</div>
+    <div>
+      <div class="kicker">Start here</div>
+      <h1>Quick start</h1>
+      <p class="lede">From a TIFF to a per-cell table: install, open an image, click four Run
+      buttons, export.</p>
+    </div>
+  </header>
+
+  <ol class="steps">
+    <li><b>Install.</b> Download the project from GitHub (<span class="ui">Code &#9656; Download ZIP</span>),
+    extract it, open the <span class="path">installers</span> folder and double-click
+    <span class="ui">Install DOMINION (Basic).bat</span>. When it finishes there is a
+    <b>DOMINION</b> icon on your Desktop. (Details and the other paths: chapter 2.)</li>
+    <li><b>Prepare an image.</b> A 2D TIFF whose first channel is your object marker (GFAP,
+    for example), with non-tissue pixels set to zero and the pixel size saved in the file.
+    A second channel, if present, is treated as nuclei.</li>
+    <li><b>Open it.</b> Double-click the Desktop icon and pick the TIFF. napari opens with the
+    image on the left and the DOMINION dock on the right.</li>
+  </ol>
+
+  <figure>
+    <img class="win" src="img/win_start.png" alt="DOMINION just opened" style="width:82%; margin:0 auto">
+    <figcaption><b>Just opened.</b> The layer list (left) holds the Signal and Nuclei channels;
+    the dock (right) is a column of sections, run from top to bottom.</figcaption>
+  </figure>
+
+  <ol class="steps" style="counter-reset: s 3">
+    <li><b>Seeds.</b> In <span class="sec">Signal seed-finding</span>, set
+    <span class="ui">Min peak distance</span> to about the spacing between neighbouring cell
+    bodies, then click <span class="ui">Run seed-finding</span>. Yellow dots appear: one per
+    object. Drag <span class="ui">Min peak intensity</span> to drop dim ones (it updates live).</li>
+    <li><b>Domains.</b> Open <span class="sec">Tessellation</span> and click
+    <span class="ui">Run tessellation</span>. Each seed grows into a coloured domain.</li>
+    <li><b>Morphology (optional).</b> <span class="ui">Run skeletonization</span>, then
+    <span class="ui">Run Sholl analysis</span>.</li>
+    <li><b>Measure and export.</b> In <span class="sec">Measurements</span> click
+    <span class="ui">Run measurements</span>, then <span class="ui">Export CSV...</span>.
+    You get <span class="path">&lt;image&gt;_domains.csv</span> (one row per domain) and
+    <span class="path">&lt;image&gt;_domains_summary.csv</span> (one row per metric for the image).</li>
+    <li><b>Keep the settings.</b> <span class="sec">Batch</span> &#9656;
+    <span class="ui">Save settings...</span> writes every slider to JSON, so the next image starts
+    from the same parameters.</li>
+  </ol>
+
+  <div class="box">
+    <div class="t">Three things worth knowing now</div>
+    <ul>
+      <li><b>Nothing reruns by itself.</b> Each section has a Run button. Changing a slider marks the
+      section stale; downstream sections keep their old result on screen until you run them again.</li>
+      <li><b>Upstream runs invalidate downstream results.</b> New seeds invalidate the domains; new
+      domains invalidate skeletons, Sholl and measurements. Their layers stay on screen for
+      comparison until you run those sections again.</li>
+      <li><b>Distances are in microns</b> everywhere, using the pixel size stored in the TIFF.
+      If the TIFF has none, DOMINION assumes 1&nbsp;&micro;m/px and warns you (chapter 4).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================== INSTALLING -->
+<section class="chapter" id="install">
+  <header class="sec-head">
+    <div class="num">2</div>
+    <div>
+      <div class="kicker">Windows &middot; Python 3.10&ndash;3.11</div>
+      <h1>Installing</h1>
+      <p class="lede">Two flavours, and two ways to get each. Most people want Basic, installed
+      with the double-click installer.</p>
+    </div>
+  </header>
+
+  <div class="paths">
+    <div>
+      <h4>Basic</h4>
+      <p>Signal mode: seeds straight from the signal channel, tessellation, skeletons, Sholl,
+      measurements. No GPU, no TensorFlow; runs on any modern PC. Python 3.11.</p>
+    </div>
+    <div class="full">
+      <h4>Full</h4>
+      <p>Basic plus nuclei mode (StarDist nuclei detection, <code>--mode nuclei</code>). Adds
+      TensorFlow 2.10, the last version with GPU support on native Windows, so Full is pinned to
+      Python 3.10. An NVIDIA GPU makes StarDist take seconds instead of minutes.</p>
+    </div>
+  </div>
+
+  <h2>Easy install <span class="tag">recommended; no Python knowledge needed</span></h2>
+  <ol class="steps">
+    <li><b>Download.</b> On the GitHub page click <span class="ui">Code &#9656; Download ZIP</span>,
+    then right-click the ZIP &#9656; <span class="ui">Extract All</span>. Put the folder somewhere
+    permanent: the Desktop shortcut starts DOMINION through a script in it.</li>
+    <li><b>Run an installer.</b> In the extracted folder open <span class="path">installers</span> and
+    double-click <span class="ui">Install DOMINION (Basic).bat</span> or
+    <span class="ui">Install DOMINION (Full).bat</span>.</li>
+    <li><b>Wait.</b> If no conda is found, the installer downloads Miniforge (about 100&nbsp;MB) into
+    <span class="path">%USERPROFILE%\miniforge3</span>. It then builds a conda environment called
+    <code>dominion</code>, installs DOMINION into it, switches Qt to PyQt5, and puts a
+    <b>DOMINION</b> shortcut on the Desktop.</li>
+  </ol>
+  <p>To <b>update</b> a ZIP download, download the new ZIP and run the installer again. If you
+  cloned the repository with git instead, <span class="ui">Update DOMINION.bat</span> pulls the
+  latest code and reinstalls it in place (on a ZIP copy it can only reinstall the same version).
+  To <b>switch</b> between
+  Basic and Full, run the other installer: it replaces the <code>dominion</code> environment.
+  <span class="ui">Launch DOMINION.bat</span> does the same as the Desktop icon.</p>
+
+  <h2>Manual install <span class="tag">if you already use conda</span></h2>
+  <p>In PowerShell, from the extracted folder (the one containing <span class="path">pyproject.toml</span>):</p>
+  <h3>Basic</h3>
+<pre>conda create -n dominion python=3.11 -y
+conda activate dominion
+pip install .</pre>
+  <h3>Full (StarDist / nuclei mode)</h3>
+<pre>conda create -n dominion python=3.10 "tensorflow=2.10.0=gpu_py310*" -c defaults -y
+conda activate dominion
+pip install ".[nuclei]"</pre>
+  <p>For a CPU-only Full install, use <code>tensorflow=2.10.0</code> instead of the
+  <code>gpu_py310*</code> spec. If napari then fails with <code>QtBindingsNotFoundError</code>,
+  swap PyQt6 for PyQt5:</p>
+<pre>pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip
+pip install PyQt5</pre>
+
+  <h2>Starting DOMINION</h2>
+  <p>From the Desktop icon, or from a terminal in the <code>dominion</code> environment:</p>
+<pre>dominion                                       <span class="c"># pick an image in a dialog (signal mode)</span>
+dominion C:\path\to\image.tif                  <span class="c"># signal mode on a specific file</span>
+dominion C:\path\to\image.tif --mode nuclei    <span class="c"># nuclei mode (Full install only)</span></pre>
+  <p>On a Basic install, <code>--mode nuclei</code> shows a message saying the Full version is
+  required, and exits.</p>
+</section>
+
+<!-- ======================================================= HOW IT WORKS -->
+<section class="chapter" id="how">
+  <header class="sec-head">
+    <div class="num">3</div>
+    <div>
+      <div class="kicker">Concepts</div>
+      <h1>How DOMINION works</h1>
+      <p class="lede">Find one seed per object, then let the seeds divide the tissue between them,
+      with the signal deciding where the borders fall.</p>
+    </div>
+  </header>
+
+  <h2>Why tessellate</h2>
+  <p>Many cell populations tile tissue with little overlap. Astrocytes are the classic case: each
+  owns a territory, and neighbouring territories barely interpenetrate. But no single immunolabel
+  shows the whole territory. GFAP lights the soma and main processes and misses the fine
+  peripheral processes that make up most of the cell's volume. Segmenting the signal directly
+  therefore badly underestimates each cell's domain.</p>
+  <p>DOMINION instead assigns <i>tissue</i> to objects: every pixel goes to one seed, and the
+  signal acts as boundary evidence rather than as the object itself. The result is a defensible
+  approximation of each object's domain, from which you can count, measure intensities in any
+  channel, describe morphology and study neighbours. The method is signal-agnostic: any channel
+  that is bright <i>at</i> your objects and dim between them works.</p>
+
+  <h2>The pipeline</h2>
+  <div class="diagram">
+    <svg class="flow" viewBox="0 0 800 250" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#1d2326"/></marker></defs>
+      <text x="0" y="14" class="lb">SIGNAL MODE</text>
+      <text x="0" y="104" class="lb">NUCLEI MODE</text>
+      <rect class="box2" x="0" y="26" width="120" height="50" rx="4"/>
+      <text x="60" y="47" class="bt">Image</text><text x="60" y="64" class="bs">signal (+ nuclei)</text>
+      <rect class="boxa" x="170" y="26" width="170" height="50" rx="4"/>
+      <text x="255" y="47" class="bt">Signal seed-finding</text><text x="255" y="64" class="bs">peaks of the signal</text>
+      <rect class="box2" x="0" y="116" width="120" height="50" rx="4"/>
+      <text x="60" y="137" class="bt">Image</text><text x="60" y="154" class="bs">signal + nuclei</text>
+      <rect class="boxa" x="150" y="116" width="100" height="50" rx="4"/>
+      <text x="200" y="137" class="bt">Nuclei</text><text x="200" y="154" class="bs">StarDist</text>
+      <rect class="boxa" x="270" y="116" width="100" height="50" rx="4"/>
+      <text x="320" y="137" class="bt">Classify</text><text x="320" y="154" class="bs">score by signal</text>
+      <rect class="boxa" x="410" y="70" width="130" height="50" rx="4"/>
+      <text x="475" y="91" class="bt">Tessellation</text><text x="475" y="108" class="bs">seeded watershed</text>
+      <rect class="boxm" x="590" y="10" width="110" height="44" rx="4"/>
+      <text x="645" y="29" class="bt">Measurements</text><text x="645" y="45" class="bs">&#8594; CSV</text>
+      <rect class="boxm" x="590" y="96" width="100" height="44" rx="4"/>
+      <text x="640" y="115" class="bt">Skeletons</text><text x="640" y="131" class="bs">skan</text>
+      <rect class="boxm" x="710" y="96" width="88" height="44" rx="4"/>
+      <text x="754" y="115" class="bt">Sholl</text><text x="754" y="131" class="bs">rings</text>
+      <path class="wire" d="M120 51 H166" marker-end="url(#ar)"/>
+      <path class="wire" d="M340 51 H375 V85 H406" marker-end="url(#ar)"/>
+      <path class="wire" d="M120 141 H146" marker-end="url(#ar)"/>
+      <path class="wire" d="M250 141 H266" marker-end="url(#ar)"/>
+      <path class="wire" d="M370 141 H375 V105 H406" marker-end="url(#ar)"/>
+      <path class="wire" d="M540 85 H565 V32 H586" marker-end="url(#ar)"/>
+      <path class="wire" d="M540 105 H565 V118 H586" marker-end="url(#ar)"/>
+      <path class="wire" d="M690 118 H706" marker-end="url(#ar)"/>
+      <path class="wire" d="M754 140 V170 H645 V60" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+      <text x="700" y="186" class="bs">skeleton and Sholl columns join the CSV</text>
+      <text x="0" y="216" class="bs" style="text-anchor:start">Every arrow is one Run button. Running a box clears every box downstream of it,</text>
+      <text x="0" y="232" class="bs" style="text-anchor:start">so results never mix parameters from different runs. Measurements and Skeletons are independent of each other.</text>
+    </svg>
+  </div>
+
+  <h2>Two modes</h2>
+  <p><b>Signal mode</b> (the default) takes seeds straight from the signal channel: local maxima
+  of the smoothed signal, or peaks of the distance transform of the thresholded signal. It has
+  fewer parameters and a direct biological reading (one bright soma, one object) and works on
+  single-channel images. Its weakness is objects with diffuse signal and no clear peak.</p>
+  <p><b>Nuclei mode</b> (Full install) first finds every nucleus with StarDist, then scores each
+  nucleus by how much signal surrounds it and keeps the ones above a threshold. Use it when the
+  nucleus is a reliable anchor for your objects and you want each seed tied to a nucleus. It
+  needs a 2-channel image.</p>
+  <p>Both modes feed the same tessellation, skeleton, Sholl and measurement steps.</p>
+
+  <h2 class="newpage">The dock</h2>
+  <p>The dock on the right is a column of collapsible sections. Click a section's title to open or
+  close it. Top to bottom:</p>
+  <table class="params">
+    <tr><th>Section</th><th>Does</th><th>Chapter</th></tr>
+    <tr><td class="name">Channels</td><td>which channel is signal, which is nuclei</td><td class="when">4</td></tr>
+    <tr><td class="name">ROI</td><td>restrict the analysis to a drawn region</td><td class="when">4</td></tr>
+    <tr><td class="name">Signal seed-finding</td><td>signal mode only: seeds from signal peaks</td><td class="when">5</td></tr>
+    <tr><td class="name">Nuclei segmentation<br>Object classification</td><td>nuclei mode only: StarDist nuclei, then keep those with enough surrounding signal</td><td class="when">6</td></tr>
+    <tr><td class="name">Tessellation</td><td>signal-guided seeded watershed: one domain per seed</td><td class="when">7</td></tr>
+    <tr><td class="name">Skeletons</td><td>per-domain skeleton rooted at the seed; branch metrics</td><td class="when">8</td></tr>
+    <tr><td class="name">Sholl analysis</td><td>ring-intersection profile per cell</td><td class="when">8</td></tr>
+    <tr><td class="name">Measurements</td><td>per-domain shape and intensity; CSV export</td><td class="when">9</td></tr>
+    <tr><td class="name">Batch</td><td>save and load all slider values as JSON</td><td class="when">10</td></tr>
+  </table>
+  <p>Every slider is a slider plus a number box; type an exact value in the box if you prefer. Some
+  sliders sit on a histogram of the data they act on, with a yellow line at the current value, so
+  you can see what you are cutting. Hover over any control for a short explanation.</p>
+</section>
+
+<!-- ================================================== INPUT, CHANNELS, ROI -->
+<section class="chapter" id="input">
+  <header class="sec-head">
+    <div class="num">4</div>
+    <div>
+      <div class="kicker">Before the first Run</div>
+      <h1>Images, channels and ROI</h1>
+      <p class="lede">Most surprising results trace back to the input: the pixel size, the tissue
+      mask, or the wrong channel as signal.</p>
+    </div>
+  </header>
+
+  <h2>What DOMINION reads</h2>
+  <table class="params">
+    <tr><th>File</th><th>How it is used</th><th>Modes</th></tr>
+    <tr><td class="name">2D single-channel TIFF</td><td>the signal channel</td><td class="when">signal</td></tr>
+    <tr><td class="name">2-channel CYX TIFF</td><td>channel 0 = signal, channel 1 = nuclei</td><td class="when">both</td></tr>
+    <tr><td class="name">N-channel CYX TIFF</td><td>as above; channels 2 and up are kept as extra channels and measured per domain</td><td class="when">both</td></tr>
+  </table>
+  <p>Z-stacks are not supported: make a single plane or a projection first. Remember that a 2D
+  domain is a cross-section through a 3D territory.</p>
+
+  <h3>Pixel size</h3>
+  <p>Every distance and area in DOMINION is in microns. The pixel size is read from the TIFF's
+  resolution tags (the ImageJ convention: unit &micro;m, XResolution in pixels per &micro;m). Fiji
+  writes these when you set <span class="ui">Image &#9656; Properties</span> and save as TIFF. If they
+  are missing, DOMINION warns and uses 1.0&nbsp;&micro;m/px: you can still tune, but slider values in
+  &micro;m and all exported areas and lengths will be wrong.</p>
+
+  <h3>Tissue mask</h3>
+  <p>DOMINION treats every non-zero pixel as tissue. Domains never extend into zero pixels. If your
+  image has background around the section, set it to exactly 0 before loading (for example in
+  Fiji: threshold or draw the section outline, then <span class="ui">Edit &#9656; Clear Outside</span>).
+  The example image's black margins are such zeros.</p>
+
+  <h2>Channels</h2>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_channels.png" alt="Channels section"></figure>
+    <div>
+      <p><span class="ui">Signal channel</span> is the immunolabel that defines your objects (GFAP,
+      for example). It drives seed-finding, tessellation, skeletons and Sholl.</p>
+      <p><span class="ui">Nuclei channel</span> is the nuclear stain (DAPI) used by nuclei mode; leave
+      it unset for signal-only work.</p>
+      <p>Changing either acts like loading a new image: all results are cleared and the sliders that
+      depend on the data (thresholds and their histograms) are reset.</p>
+    </div>
+  </div>
+
+  <h2>ROI: analyse part of the image</h2>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_roi.png" alt="ROI section"></figure>
+    <div>
+      <ol>
+        <li>Select the <b>ROI</b> layer in napari's layer list.</li>
+        <li>Pick the rectangle or polygon tool in the layer controls and draw.</li>
+        <li>Click <span class="ui">Apply ROI</span>. The tissue mask becomes tissue &cap; ROI, and every
+        stage after it sees only that region.</li>
+      </ol>
+      <p>Only the <b>last</b> shape drawn counts. <span class="ui">Clear ROI</span> returns to the whole
+      tissue. Applying or clearing an ROI clears all results and resets the data-driven sliders, so
+      load your saved settings again afterwards (chapter 10). ROIs are not saved with settings.</p>
+    </div>
+  </div>
+  <figure>
+    <img class="win" src="img/win_roi.png" alt="Analysis restricted to a rectangle">
+    <figcaption><b>ROI applied.</b> Seeds and domains exist only inside the yellow rectangle. An ROI
+    is also the quickest way to tune parameters on a large image: the steps run in a fraction of
+    the time.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================================================= SIGNAL SEEDS -->
+<section class="chapter" id="seeds">
+  <header class="sec-head">
+    <div class="num">5</div>
+    <div>
+      <div class="kicker">Signal mode &middot; stage 1</div>
+      <h1>Finding seeds</h1>
+      <p class="lede">One seed per object, placed at the brightest point of each object's signal.
+      Every domain you get later comes from one of these dots.</p>
+    </div>
+  </header>
+
+  <div class="side">
+    <figure><img class="panel" src="img/panel_signal_seeds.png" alt="Signal seed-finding section">
+    <figcaption>After a Run. The lower histogram shows every peak's strength; the yellow line is the
+    live cut-off.</figcaption></figure>
+    <div>
+      <h3>Method</h3>
+      <p><b>Local maxima of smoothed signal</b> (default): blur the signal, then take local maxima at
+      least <i>Min peak distance</i> apart. Each seed's <i>strength</i> is its smoothed intensity.
+      Best for cells with a bright soma.</p>
+      <p><b>Distance-transform peaks of thresholded signal</b>: threshold the signal, compute each
+      pixel's distance to the nearest background pixel, and take the peaks of that. Strength is the
+      depth in pixels. Better at splitting touching blobs and at cells with diffuse signal but a
+      solid body.</p>
+      <h3>Live filter</h3>
+      <p>After a Run, <span class="ui">Min peak intensity</span> (or <span class="ui">Min peak depth</span>)
+      drops weak seeds instantly, without re-running. Its histogram usually shows a low-strength
+      shoulder of background peaks; put the line just past it.</p>
+    </div>
+  </div>
+
+  <table class="params">
+    <tr><th>Control</th><th>Range &middot; default</th><th>What it does</th></tr>
+    <tr><td class="name">Smoothing &sigma; (&micro;m)</td><td class="rng">0&ndash;20 &middot; 5.0</td>
+      <td>Gaussian blur before peak detection. Larger merges nearby peaks: too small and one cell's
+      processes become several seeds; too large and neighbouring cells merge. Start near a third of
+      the soma diameter.</td></tr>
+    <tr><td class="name">Signal threshold</td><td class="rng">0&ndash;99.5th pct &middot; median</td>
+      <td>Pixels below it are ignored. Defaults to the median non-zero signal in the tissue. Raise it to
+      keep seeds off dim background.</td></tr>
+    <tr><td class="name">Min peak distance (&micro;m)</td><td class="rng">1&ndash;100 &middot; 15</td>
+      <td>Two seeds can be no closer than this. Set it to a little under the typical spacing between
+      neighbouring somata.</td></tr>
+    <tr><td class="name">Min peak intensity / depth</td><td class="rng">live &middot; 0</td>
+      <td>Discard seeds weaker than this. Live: no Run needed.</td></tr>
+  </table>
+
+  <figure>
+    <img class="win" src="img/win_seeds.png" alt="Seeds on the signal">
+    <figcaption><b>Seeds.</b> The <b>Object seeds</b> layer: one yellow dot per object. Change the dot size
+    with napari's <i>point size</i> slider in the layer controls; it is kept across Runs.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================================================= NUCLEI MODE -->
+<section class="chapter" id="nuclei">
+  <header class="sec-head">
+    <div class="num">6</div>
+    <div>
+      <div class="kicker">Nuclei mode &middot; stages 1 and 2 &middot; Full install</div>
+      <h1>StarDist seeds</h1>
+      <p class="lede">Find every nucleus, then keep only the nuclei that sit inside your
+      objects' signal. Start with <code>dominion image.tif --mode nuclei</code>.</p>
+    </div>
+  </header>
+
+  <h2>Nuclei segmentation</h2>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_nuclei.png" alt="Nuclei segmentation section"></figure>
+    <div>
+      <p><span class="ui">Run StarDist</span> runs the pretrained <code>2D_versatile_fluo</code> model on
+      the nuclei channel (normalised to its 1st&ndash;99.8th percentiles, tiled automatically for large
+      images). Results appear as <b>Nuclei (mask)</b> and <b>Nuclei (centroids)</b> layers.</p>
+      <p>The result is cached next to the image (<span class="path">image.dominion_cache_&lt;hash&gt;\</span>),
+      keyed on the image and both thresholds, so re-running with the same settings is instant.
+      Changing the image file invalidates the cache.</p>
+    </div>
+  </div>
+  <table class="params">
+    <tr><th>Control</th><th>Range &middot; default</th><th>What it does</th></tr>
+    <tr><td class="name">prob_thresh</td><td class="rng">0&ndash;1 &middot; 0.50</td>
+      <td>Object-probability threshold. Higher keeps only confident nuclei; lower finds faint ones and
+      more false positives.</td></tr>
+    <tr><td class="name">nms_thresh</td><td class="rng">0&ndash;1 &middot; 0.40</td>
+      <td>Overlap allowed between neighbouring detections. Raise it in crowded tissue where real
+      nuclei touch.</td></tr>
+  </table>
+  <div class="box warn">
+    <div class="t">Scale matters</div>
+    The StarDist model expects nuclei roughly 10&ndash;30 pixels across. On low-magnification
+    overviews, where nuclei are only a few pixels wide, upsample the image before loading or expect
+    noisy nuclei.
+  </div>
+
+  <h2>Object classification</h2>
+  <p>Each nucleus <i>i</i> gets an object-likeness score from the signal around it:</p>
+  <p style="text-align:center; font-size:10.5pt">score<sub><i>i</i></sub> = &sum;<sub><i>p</i></sub> [ &alpha;&middot;signal(<i>p</i>) + (1&minus;&alpha;)&middot;(<i>R</i> &minus; dist(<i>p</i>, <i>c<sub>i</sub></i>)) ]</p>
+  <p>summed over tissue pixels <i>p</i> within radius <i>R</i> of the centroid <i>c<sub>i</sub></i>
+  whose signal is at least <i>T</i>. Nuclei scoring at least &theta; become seeds (yellow); the rest
+  stay grey.</p>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_classification.png" alt="Object classification section"></figure>
+    <table class="params">
+      <tr><th>Control</th><th>What it does</th></tr>
+      <tr><td class="name">Signal threshold T</td><td>Signal a pixel needs to count toward a score. Default: median non-zero signal. Needs Run.</td></tr>
+      <tr><td class="name">Search radius R (&micro;m)</td><td>Disc around each nucleus that is scored. About the soma radius plus a little. 1&ndash;50, default 10. Needs Run.</td></tr>
+      <tr><td class="name">Weight &alpha;</td><td>1 = intensity only; 0 = proximity only (counts bright pixels, nearer ones worth more). Default 0.5. Needs Run.</td></tr>
+      <tr><td class="name">Seed threshold &theta;</td><td>Keep nuclei scoring at least &theta;. Live. Default: median score.</td></tr>
+    </table>
+  </div>
+  <figure>
+    <img class="win" src="img/win_nuclei.png" alt="Nuclei mode: classified seeds">
+    <figcaption><b>Nuclei mode.</b> DAPI in blue, GFAP in green. StarDist nuclei are shown as coloured masks; yellow
+    dots are nuclei kept as astrocyte seeds, grey dots were rejected. Here &theta; is set so that
+    about one nucleus in seven is kept.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================================================= TESSELLATION -->
+<section class="chapter" id="tess">
+  <header class="sec-head">
+    <div class="num">7</div>
+    <div>
+      <div class="kicker">Both modes &middot; the core step</div>
+      <h1>Tessellation</h1>
+      <p class="lede">Each seed floods outward over the tissue until it meets its neighbours. The
+      signal decides where they meet.</p>
+    </div>
+  </header>
+
+  <p>DOMINION runs a seeded watershed from the seeds over an elevation map that blends two things:
+  the inverted, smoothed signal (bright = low = easy to flood) and the distance from the nearest
+  seed. <span class="ui">Signal influence</span> sets the blend:</p>
+  <p style="text-align:center">elevation = s&middot;(1 &minus; signal) + (1 &minus; s)&middot;distance&nbsp;&nbsp;&nbsp;(both normalised to 0&ndash;1)</p>
+  <p>The result is the <b>Domains</b> labels layer, one colour per object, and the count under the Run
+  button.</p>
+
+  <div class="row3">
+    <figure><img class="view" src="img/view_tess_si0.jpg" alt="">
+      <figcaption><b>Signal influence 0.</b> Distance only: a Voronoi diagram of the seeds. Borders are
+      straight and ignore the cells.</figcaption></figure>
+    <figure><img class="view" src="img/view_tess_minsig0.jpg" alt="">
+      <figcaption><b>Signal influence 0.8.</b> Borders bend around bright processes, so each process
+      stays with its own cell. Every tissue pixel is still assigned.</figcaption></figure>
+    <figure><img class="view" src="img/view_tess_main.jpg" alt="">
+      <figcaption><b>&hellip;plus Min signal.</b> Pixels below the floor are left out, so each domain
+      is carved down to the labelled cell itself.</figcaption></figure>
+  </div>
+
+  <div class="side">
+    <figure><img class="panel" src="img/panel_tessellation.png" alt="Tessellation section"></figure>
+    <div>
+      <h3>Territory or cell?</h3>
+      <p>The first two panels above answer &ldquo;which tissue belongs to which cell&rdquo;: use them
+      for territory size, density and neighbour analysis, and for intensities of other markers within
+      each territory. The third answers &ldquo;what does each labelled cell look like&rdquo;: use it
+      for skeletons, Sholl and signal-shape measures. Many projects run both and save each as its own
+      settings file.</p>
+    </div>
+  </div>
+
+  <table class="params">
+    <tr><th>Control</th><th>Range &middot; default</th><th>What it does</th></tr>
+    <tr><td class="name">Signal influence</td><td class="rng">0&ndash;1 &middot; 0.5</td>
+      <td>0 = distance only (Voronoi-like); 1 = follow the signal only. 0.6&ndash;0.9 suits most stains.</td></tr>
+    <tr><td class="name">Smoothing &sigma; (&micro;m)</td><td class="rng">0&ndash;10 &middot; 2.0</td>
+      <td>Blur of the signal that guides the watershed (and that Min signal is compared against).
+      Larger: smoother borders that follow overall shape. Small: borders follow fine processes.</td></tr>
+    <tr><td class="name">Min signal</td><td class="rng">histogram &middot; 0 (off)</td>
+      <td>Pixels whose smoothed signal is below this are excluded from every domain: background,
+      gaps, vessels.</td></tr>
+    <tr><td class="name">Min domain area (&micro;m&sup2;)</td><td class="rng">0&ndash;5000 &middot; 0 (off)</td>
+      <td>Domains smaller than this lose their seed and are re-flooded by their neighbours instead of
+      surviving as slivers. Repeats up to five times.</td></tr>
+    <tr><td class="name">Max domain area (&micro;m&sup2;)</td><td class="rng">0&ndash;100&thinsp;000 &middot; 0 (off)</td>
+      <td>Each domain is trimmed to this area, keeping the pixels nearest its seed. Useful at tissue
+      edges where a lone seed would otherwise claim a huge region.</td></tr>
+  </table>
+
+  <figure>
+    <img class="win" src="img/win_domains.png" alt="Domains on the whole image">
+    <figcaption><b>The whole section after tessellation.</b> Domain colours are arbitrary; to check one
+    domain, hover over it: napari's status bar shows its label number, which is the
+    <code>domain_id</code> in the CSV.</figcaption>
+  </figure>
+</section>
+
+<!-- ======================================================= MORPHOLOGY -->
+<section class="chapter" id="morph">
+  <header class="sec-head">
+    <div class="num">8</div>
+    <div>
+      <div class="kicker">Per-cell morphology</div>
+      <h1>Skeletons and Sholl analysis</h1>
+      <p class="lede">Because each cell already has its own domain, tracing it is simple: skeletonize
+      inside the domain, root the tree at the seed, count.</p>
+    </div>
+  </header>
+
+  <h2>Skeletons</h2>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_skeletons.png" alt="Skeletons section"></figure>
+    <div>
+      <p><span class="ui">Run skeletonization</span> thins each domain to a one-pixel-wide skeleton
+      (scikit-image), keeps its largest connected piece, roots it at the seed, and decomposes it into
+      branches with <code>skan</code>. The <b>Skeletons</b> layer shows the result in each domain's
+      colour.</p>
+      <p>Skeletons follow the domain mask, so they describe the cell only if the domains were carved
+      with <i>Min signal</i> (chapter 7). On uncarved territories the skeleton traces the territory's
+      shape instead.</p>
+    </div>
+  </div>
+  <table class="params">
+    <tr><th>Control</th><th>Range &middot; default</th><th>What it does</th></tr>
+    <tr><td class="name">Min branch length (&micro;m)</td><td class="rng">0&ndash;20 &middot; 0 (off)</td>
+      <td>Prunes end twigs shorter than this&hellip;</td></tr>
+    <tr><td class="name">Min branch signal</td><td class="rng">histogram &middot; 0 (off)</td>
+      <td>&hellip;and end twigs whose mean signal is below this. A twig is pruned only if it fails
+      <b>every</b> test that is switched on: a short twig survives if bright, a dim one if long. Pruning
+      repeats until nothing changes.</td></tr>
+    <tr><td class="name">Force tree topology</td><td class="rng">on</td>
+      <td>Breaks loops in the skeleton (common where processes cross), keeping the brightest paths
+      and cutting the dimmest one in each loop, so every cell is a tree and branch counts are well
+      defined.</td></tr>
+  </table>
+  <figure>
+    <img class="view" src="img/view_skeletons.jpg" alt="Skeletons" style="width:60%; margin:0 auto">
+    <figcaption style="text-align:center"><b>Skeletons</b> over the signal, domains faint underneath.</figcaption>
+  </figure>
+
+  <h2>Sholl analysis</h2>
+  <p>Sholl analysis counts how many times a cell's arbor crosses concentric circles centred on the
+  soma. DOMINION counts <i>branches</i>, not pixels: within each annulus, each connected piece of
+  skeleton is one intersection, so a long radial branch counts once per ring.</p>
+  <div class="row2">
+    <figure><img class="view" src="img/sholl_cell.png" alt="One astrocyte with Sholl rings">
+      <figcaption><b>One cell.</b> Domain (grey), skeleton (magenta), seed (yellow) and rings every
+      5&nbsp;&micro;m. Scale bar 20&nbsp;&micro;m.</figcaption></figure>
+    <figure><img src="img/sholl_profile.svg" alt="Its Sholl profile" style="width:100%; margin-top:8mm">
+      <figcaption><b>Its profile:</b> intersections at each ring radius, with the two radii the CSV
+      reports.</figcaption></figure>
+  </div>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_sholl.png" alt="Sholl analysis section"></figure>
+    <div>
+      <p><span class="ui">Ring spacing (&micro;m)</span> (0.5&ndash;50, default 5) sets the distance between
+      rings. Finer spacing gives a smoother profile but each ring counts fewer pixels; 2&ndash;5&nbsp;&micro;m
+      suits astrocytes at typical confocal resolution.</p>
+      <p>The summary under the button gives medians across cells; the per-cell numbers go into the
+      CSV.</p>
+    </div>
+  </div>
+  <table class="cols">
+    <tr><th>Metric</th><th>Meaning</th></tr>
+    <tr><td class="c">peak_intersections</td><td>most crossings at any ring: how bushy the arbor is at its widest</td></tr>
+    <tr><td class="c">peak_radius_um</td><td>the radius where that peak occurs</td></tr>
+    <tr><td class="c">max_radius_um</td><td>distance from the seed to the farthest skeleton pixel: the arbor's reach</td></tr>
+    <tr><td class="c">critical_radius_um</td><td>first radius beyond the peak where crossings fall to half the peak or fewer</td></tr>
+    <tr><td class="c">auc</td><td>sum of crossings over all rings, a proxy for total branch length</td></tr>
+    <tr><td class="c">ramification_index</td><td>peak crossings &divide; crossings at the first ring: how much the arbor branches out from the primary processes</td></tr>
+  </table>
+</section>
+
+<!-- ======================================================= MEASUREMENTS -->
+<section class="chapter" id="measure">
+  <header class="sec-head">
+    <div class="num">9</div>
+    <div>
+      <div class="kicker">Outputs</div>
+      <h1>Measurements and export</h1>
+      <p class="lede">One row per domain, every channel measured inside it, plus skeleton and Sholl
+      columns if you ran them.</p>
+    </div>
+  </header>
+
+  <div class="side">
+    <figure><img class="panel" src="img/panel_measurements.png" alt="Measurements section"></figure>
+    <div>
+      <p>Tick the channels to measure (signal, nuclei and any extra channels) and click
+      <span class="ui">Run measurements</span>. The summary shows the domain count and median area and
+      intensity.</p>
+      <p><span class="ui">Export CSV...</span> asks where to save, defaulting to the image's folder, and
+      writes two files:</p>
+      <ul>
+        <li><span class="path">image_domains.csv</span>: one row per domain;</li>
+        <li><span class="path">image_domains_summary.csv</span>: one <code>metric,value</code> row per
+        image-level number, including every parameter used, so the file documents how it was made.</li>
+      </ul>
+      <p>Run Skeletons and Sholl <i>before</i> exporting to get their columns; otherwise those cells are
+      left empty.</p>
+    </div>
+  </div>
+
+  <h2>Per-domain table <span class="tag">image_domains.csv</span></h2>
+  <table class="cols">
+    <tr><th>Columns</th><th>Meaning</th></tr>
+    <tr><td class="c">domain_id</td><td>the domain's label in the Domains layer</td></tr>
+    <tr><td class="c">area_um2</td><td>domain area</td></tr>
+    <tr><td class="c">centroid_y_px, centroid_x_px</td><td>domain centroid, in pixels (multiply by the pixel size for &micro;m)</td></tr>
+    <tr><td class="c">eccentricity, solidity</td><td>shape: 0 = circle &hellip; 1 = line; area &divide; convex-hull area</td></tr>
+    <tr><td class="c">perimeter_um, equivalent_diameter_um</td><td>outline length; diameter of a circle of the same area</td></tr>
+    <tr><td class="c">axis_major_um, axis_minor_um</td><td>axes of the best-fit ellipse</td></tr>
+    <tr><td class="c">&lt;channel&gt;_mean, _median, _sum,<br>_min, _max, _std</td><td>intensity statistics of each measured channel inside the domain (<code>signal_</code>, <code>nuclei_</code>, <code>channel_2_</code>&hellip;)</td></tr>
+    <tr><td class="c">skel_total_length_um, skel_n_branches,<br>skel_n_endpoints, skel_n_branchpoints</td><td>from Skeletons</td></tr>
+    <tr><td class="c">sholl_*</td><td>the six Sholl metrics (chapter 8)</td></tr>
+  </table>
+
+  <h2>Image summary <span class="tag">image_domains_summary.csv</span></h2>
+  <p>Image size and pixel size; tissue area; <code>n_domains</code> and
+  <code>domain_density_per_mm2</code>; domain area mean, median, SD, quartiles, min and max; median
+  and mean of each channel's per-domain mean intensity; medians of the skeleton and Sholl metrics;
+  then every parameter, prefixed by its stage (<code>seeds__sigma_um</code>,
+  <code>tessellation__min_signal</code>, &hellip;).</p>
+
+  <h2>Answering common questions</h2>
+  <table class="params">
+    <tr><th>Question</th><th>Where the answer is</th></tr>
+    <tr><td class="name">How many objects?</td><td><code>n_domains</code>, or <code>domain_density_per_mm2</code> to compare
+      sections of different sizes. For counts per region, draw an ROI per region and export each.</td></tr>
+    <tr><td class="name">How much of marker X per cell?</td><td>Load a multi-channel TIFF, tick X in Measurements,
+      use <code>X_mean</code> (concentration) or <code>X_sum</code> (total amount) per domain.</td></tr>
+    <tr><td class="name">How big, how branched?</td><td><code>area_um2</code> (territory), skeleton and Sholl columns (arbor).</td></tr>
+    <tr><td class="name">Who neighbours whom?</td><td>Not computed in the app yet. Use the centroids, as below.</td></tr>
+  </table>
+  <p>Nearest-neighbour distances from the exported centroids (Python with pandas and SciPy, both
+  already in the <code>dominion</code> environment):</p>
+<pre>import pandas as pd
+from scipy.spatial import cKDTree
+df  = pd.read_csv(r"C:\path\to\image_domains.csv")
+px  = 0.2857                                  <span class="c"># &micro;m per pixel: pixel_size_um in the summary CSV</span>
+xy  = df[["centroid_x_px", "centroid_y_px"]].to_numpy() * px
+d, _ = cKDTree(xy).query(xy, k=2)             <span class="c"># k=2: the nearest point is the cell itself</span>
+df["nn_distance_um"] = d[:, 1]</pre>
+  <p>For true neighbour relationships (which domains share a border), use the Domains layer: in
+  napari's console, <code>viewer.layers["Domains"].data</code> is the label image, and pixels where two
+  different labels touch are the shared borders.</p>
+</section>
+
+<!-- ======================================================= SETTINGS -->
+<section class="chapter" id="batch">
+  <header class="sec-head">
+    <div class="num">10</div>
+    <div>
+      <div class="kicker">Reproducibility</div>
+      <h1>Saving settings</h1>
+      <p class="lede">Tune once, then apply the same parameters to every image in the experiment.</p>
+    </div>
+  </header>
+  <div class="side">
+    <figure><img class="panel" src="img/panel_batch.png" alt="Batch section"></figure>
+    <div>
+      <p><span class="ui">Save settings...</span> writes every section's controls (method, sliders,
+      check boxes, the measured channels) to a JSON file, by default <span class="path">image_settings.json</span>
+      next to the image.</p>
+      <p><span class="ui">Load settings...</span> reads one back and sets every control. It does
+      <b>not</b> run anything: click each Run button in turn, top to bottom.</p>
+    </div>
+  </div>
+  <p>A settings file is plain JSON that you can read, keep with your data, or cite in a methods
+  section:</p>
+<pre>{ "sections": {
+    "signal_seed_finding": { "method": "Local maxima of smoothed signal", "sigma_um": 6.6,
+                             "signal_threshold": 266.0, "min_distance_um": 15.0, "peak_strength": 338.8 },
+    "tessellation":        { "signal_influence": 0.8, "smoothing_sigma_um": 0.1, "min_signal": 315.0,
+                             "min_area_um2": 0.0, "max_area_um2": 0.0 },
+    "skeletons":           { "min_branch_length_um": 0.0, "min_branch_signal": 0.0, "force_tree": true },
+    "sholl_analysis":      { "ring_spacing_um": 5.0 },
+    "measurements":        { "channels_checked": ["signal", "nuclei"] } } }</pre>
+  <p>These are the settings behind the screenshots in this manual. The thresholds are raw intensity
+  values, so they carry over only between images acquired and exported the same way. Keep a
+  settings file per staining batch.</p>
+  <div class="box">
+    <div class="t">For a whole experiment</div>
+    <ul>
+      <li>Tune on two or three representative images (or ROIs of them), then save.</li>
+      <li>For each image: open it, <span class="ui">Load settings...</span>, Run each section,
+      <span class="ui">Export CSV...</span>. Each export carries its parameters in the summary file.</li>
+      <li>Combine the <span class="path">*_domains.csv</span> files afterwards (for example with
+      <code>pandas.concat</code>), adding a column for the image name.</li>
+      <li>There is no unattended run-a-folder mode yet; it is planned.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ======================================================= TIPS -->
+<section class="chapter" id="tips">
+  <header class="sec-head">
+    <div class="num">11</div>
+    <div>
+      <div class="kicker">Practice</div>
+      <h1>Choosing parameters</h1>
+      <p class="lede">Tune from upstream to downstream, judge each stage by eye before moving on,
+      and change one thing at a time.</p>
+    </div>
+  </header>
+
+  <h2>A tuning order that converges</h2>
+  <ol class="steps">
+    <li><b>Check the input.</b> Is the pixel size right (hover over the image: napari shows
+    coordinates in &micro;m)? Is the background exactly zero? Is the right channel the signal?</li>
+    <li><b>Pick a test region.</b> Draw an ROI over a representative patch with dense and sparse
+    areas. Every Run is then quick.</li>
+    <li><b>Seeds first, and only seeds.</b> Zoom in and compare dots with cells. Aim for one seed
+    per soma. Fix <i>merges</i> (two cells, one seed) by lowering &sigma; or Min peak distance; fix
+    <i>splits</i> (one cell, several seeds) by raising them. Then use the live Min peak
+    intensity to drop seeds on background.</li>
+    <li><b>Tessellation.</b> Start at Signal influence 0.8, smoothing 1&ndash;2&nbsp;&micro;m, Min signal 0.
+    Check that borders run between cells, not through them. Then decide whether you want territories
+    (keep Min signal 0) or carved cells (raise Min signal until the domains hug the stain).</li>
+    <li><b>Clean-up.</b> Use Min domain area for slivers, Max domain area for edge seeds that claim
+    too much.</li>
+    <li><b>Save settings, clear the ROI, load settings, run on the whole image.</b></li>
+  </ol>
+
+  <h2>Rules of thumb <span class="tag">astrocytes, GFAP, confocal 20&ndash;40&times;</span></h2>
+  <table class="params">
+    <tr><th>Parameter</th><th>Start at</th><th>Why</th></tr>
+    <tr><td class="name">Seed &sigma;</td><td class="rng">&frac13; soma diameter</td><td>Smooths processes away so each soma gives one peak.</td></tr>
+    <tr><td class="name">Min peak distance</td><td class="rng">0.6&ndash;0.8 &times; cell spacing</td><td>Astrocyte somata are rarely closer than ~15&nbsp;&micro;m.</td></tr>
+    <tr><td class="name">Signal influence</td><td class="rng">0.8</td><td>Strong enough to bend borders around processes, not so strong that bright vessels capture territory.</td></tr>
+    <tr><td class="name">Min signal (carving)</td><td class="rng">just above the background peak</td><td>The histogram's tall left peak is background; the long tail is cells.</td></tr>
+    <tr><td class="name">Sholl spacing</td><td class="rng">2&ndash;5&nbsp;&micro;m</td><td>Several rings per process segment without counting pixel noise.</td></tr>
+  </table>
+
+  <h2>Comparing groups</h2>
+  <ul>
+    <li><b>Keep parameters fixed across conditions.</b> Tune on a mix of control and treated images,
+    then use one settings file for all. If a threshold must differ, it is a confound: report it.</li>
+    <li><b>Watch diffuse signal.</b> Reactive astrocytes with broad GFAP and no clear soma peak are
+    undercounted by local maxima; try the distance-transform method or nuclei mode, and check seed
+    counts against a manual count on a few fields.</li>
+    <li><b>There is no built-in ground truth.</b> Validate on a handful of hand-annotated fields
+    before trusting group differences.</li>
+  </ul>
+</section>
+
+<!-- ======================================================= TROUBLESHOOTING -->
+<section class="chapter" id="trouble">
+  <header class="sec-head">
+    <div class="num">12</div>
+    <div>
+      <div class="kicker">When something looks wrong</div>
+      <h1>Troubleshooting</h1>
+      <p class="lede">Grouped by when it happens.</p>
+    </div>
+  </header>
+
+  <h2>Installing and starting</h2>
+  <dl class="trouble">
+    <dt>napari fails to start with <code>QtBindingsNotFoundError</code> or a Qt DLL error.</dt>
+    <dd>PyQt6 does not load on some Windows machines. The easy installer already switches to PyQt5; on
+    a manual install run the two <code>pip</code> lines in chapter 2.</dd>
+    <dt>&ldquo;DOMINION &mdash; Full version required&rdquo; when starting nuclei mode.</dt>
+    <dd>This is a Basic install. Run <span class="ui">Install DOMINION (Full).bat</span>, or the Full
+    manual install, then try again.</dd>
+    <dt>The installer window closes or stops with an error.</dt>
+    <dd>Run it again and read the last lines before pressing a key. A failed download (proxy,
+    firewall) of Miniforge or packages is the usual cause; installing Miniforge yourself first also
+    works, since the installer uses any conda it finds.</dd>
+    <dt>The Desktop icon does nothing, or says DOMINION isn't installed.</dt>
+    <dd>The icon starts <span class="path">installers\Launch DOMINION.bat</span> in the folder you
+    installed from. If that folder was moved or deleted, run the installer again from its new place.</dd>
+    <dt>StarDist takes minutes.</dt>
+    <dd>TensorFlow is running on the CPU. That is expected on a CPU-only Full install. For GPU use you
+    need an NVIDIA GPU and the GPU Full install. Results are cached, so re-runs are instant.</dd>
+  </dl>
+
+  <h2>Loading an image</h2>
+  <dl class="trouble">
+    <dt>A warning that the pixel size is missing, or distances that make no sense.</dt>
+    <dd>The TIFF has no resolution metadata. Set it in Fiji (<span class="ui">Image &#9656; Properties</span>)
+    and save as TIFF again.</dd>
+    <dt>&ldquo;Expected a 2D single-channel TIFF or a 3D CYX TIFF&rdquo;.</dt>
+    <dd>The file is a Z-stack, time series, or has channels last. Save a single plane (or a projection)
+    with channels first.</dd>
+    <dt>Domains spill into the background.</dt>
+    <dd>The background is not exactly zero. Clear it before loading (chapter 4), or raise
+    <i>Min signal</i> in Tessellation.</dd>
+  </dl>
+
+  <h2>Results</h2>
+  <dl class="trouble">
+    <dt>A Run button is greyed out.</dt>
+    <dd>Its input does not exist yet: run the section above it. Changing channels or the ROI clears
+    every result.</dd>
+    <dt>Too many seeds, several per cell.</dt>
+    <dd>Raise Smoothing &sigma; and Min peak distance; raise Min peak intensity.</dd>
+    <dt>Too few seeds, neighbouring cells share one.</dt>
+    <dd>Lower &sigma; and Min peak distance; lower the signal threshold. For diffuse cells, try the
+    distance-transform method.</dd>
+    <dt>Thin slivers between real domains.</dt>
+    <dd>Spurious seeds at cell edges. Raise Min peak intensity, or set Min domain area.</dd>
+    <dt>Domain borders cut through cells.</dt>
+    <dd>Raise Signal influence, or lower the tessellation smoothing so borders follow processes.</dd>
+    <dt>After loading settings nothing changed on screen.</dt>
+    <dd>Loading only sets the controls. Click each Run button, top to bottom.</dd>
+    <dt>Skeletons look like blobs or territory outlines.</dt>
+    <dd>The domains are uncarved territories. Raise Min signal in Tessellation, re-run, then re-run
+    Skeletons.</dd>
+    <dt>Skeleton or Sholl columns are empty in the CSV.</dt>
+    <dd>Run Skeletons and Sholl before Export, and after the latest tessellation.</dd>
+    <dt>Skeletonization is slow on a big image.</dt>
+    <dd>It scales with the number of cells: about 25&nbsp;s for 300 cells on the example image. Tune on an ROI.</dd>
+  </dl>
+</section>
+
+<!-- ======================================================= REFERENCE -->
+<section class="chapter" id="ref">
+  <header class="sec-head">
+    <div class="num">13</div>
+    <div>
+      <div class="kicker">Every control</div>
+      <h1>Parameter reference</h1>
+      <p class="lede">Live = takes effect at once. Run = takes effect on the section's next Run.</p>
+    </div>
+  </header>
+  <table class="params">
+    <tr><th>Section &middot; control</th><th>Range &middot; default</th><th>When</th><th>Effect</th></tr>
+    <tr><td class="name">Channels &middot; Signal / Nuclei</td><td class="rng">channel 0 / 1</td><td class="when">at once</td><td>Which channel defines objects / nuclei. Clears all results.</td></tr>
+    <tr><td class="name">ROI &middot; Apply / Clear</td><td class="rng">whole tissue</td><td class="when">at once</td><td>Restrict to the last drawn shape. Clears all results.</td></tr>
+    <tr><td class="name">Seeds &middot; Method</td><td class="rng">local maxima</td><td class="when">Run</td><td>Local maxima of smoothed signal, or distance-transform peaks.</td></tr>
+    <tr><td class="name">Seeds &middot; Smoothing &sigma;</td><td class="rng">0&ndash;20 &micro;m &middot; 5</td><td class="when">Run</td><td>Blur before peak finding.</td></tr>
+    <tr><td class="name">Seeds &middot; Signal threshold</td><td class="rng">data &middot; median</td><td class="when">Run</td><td>Ignore pixels below.</td></tr>
+    <tr><td class="name">Seeds &middot; Min peak distance</td><td class="rng">1&ndash;100 &micro;m &middot; 15</td><td class="when">Run</td><td>Minimum seed spacing.</td></tr>
+    <tr><td class="name">Seeds &middot; Min peak intensity/depth</td><td class="rng">data &middot; 0</td><td class="when">live</td><td>Drop weak seeds.</td></tr>
+    <tr><td class="name">Nuclei &middot; prob_thresh</td><td class="rng">0&ndash;1 &middot; 0.50</td><td class="when">Run</td><td>StarDist detection confidence.</td></tr>
+    <tr><td class="name">Nuclei &middot; nms_thresh</td><td class="rng">0&ndash;1 &middot; 0.40</td><td class="when">Run</td><td>StarDist overlap allowed.</td></tr>
+    <tr><td class="name">Classify &middot; T</td><td class="rng">data &middot; median</td><td class="when">Run</td><td>Signal a pixel needs to count toward a score.</td></tr>
+    <tr><td class="name">Classify &middot; R</td><td class="rng">1&ndash;50 &micro;m &middot; 10</td><td class="when">Run</td><td>Scoring radius around each nucleus.</td></tr>
+    <tr><td class="name">Classify &middot; &alpha;</td><td class="rng">0&ndash;1 &middot; 0.50</td><td class="when">Run</td><td>Intensity (1) vs proximity (0) weighting.</td></tr>
+    <tr><td class="name">Classify &middot; &theta;</td><td class="rng">data &middot; median</td><td class="when">live</td><td>Keep nuclei scoring at least &theta;.</td></tr>
+    <tr><td class="name">Tessellation &middot; Signal influence</td><td class="rng">0&ndash;1 &middot; 0.5</td><td class="when">Run</td><td>Signal vs distance in the watershed.</td></tr>
+    <tr><td class="name">Tessellation &middot; Smoothing &sigma;</td><td class="rng">0&ndash;10 &micro;m &middot; 2</td><td class="when">Run</td><td>Blur of the guiding signal.</td></tr>
+    <tr><td class="name">Tessellation &middot; Min signal</td><td class="rng">data &middot; 0 (off)</td><td class="when">Run</td><td>Exclude dim pixels: carve domains to the cell.</td></tr>
+    <tr><td class="name">Tessellation &middot; Min domain area</td><td class="rng">0&ndash;5000 &micro;m&sup2; &middot; 0</td><td class="when">Run</td><td>Absorb small domains into neighbours.</td></tr>
+    <tr><td class="name">Tessellation &middot; Max domain area</td><td class="rng">0&ndash;100k &micro;m&sup2; &middot; 0</td><td class="when">Run</td><td>Trim domains to the pixels nearest their seed.</td></tr>
+    <tr><td class="name">Skeletons &middot; Min branch length</td><td class="rng">0&ndash;20 &micro;m &middot; 0</td><td class="when">Run</td><td>Prune short end twigs (if also dim).</td></tr>
+    <tr><td class="name">Skeletons &middot; Min branch signal</td><td class="rng">data &middot; 0</td><td class="when">Run</td><td>Prune dim end twigs (if also short).</td></tr>
+    <tr><td class="name">Skeletons &middot; Force tree</td><td class="rng">on</td><td class="when">Run</td><td>Cut the dimmest path in each loop.</td></tr>
+    <tr><td class="name">Sholl &middot; Ring spacing</td><td class="rng">0.5&ndash;50 &micro;m &middot; 5</td><td class="when">Run</td><td>Distance between rings.</td></tr>
+    <tr><td class="name">Measurements &middot; channels</td><td class="rng">all ticked</td><td class="when">Run</td><td>Which channels get intensity columns.</td></tr>
+  </table>
+
+</section>
+
+</body>
+</html>

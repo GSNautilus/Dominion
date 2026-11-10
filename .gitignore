@@ -71,6 +71,12 @@ outputs/
 !docs/**/*.png
 !docs/**/*.jpg
 !docs/**/*.jpeg
+!manual/img/*.png
+!manual/img/*.jpg
+
+# Manual build scratch (build.py deletes these when it finishes)
+manual/_print.html
+manual/_pass1.pdf
 
 # Env / secrets
 .env

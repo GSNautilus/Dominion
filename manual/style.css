@@ -1,0 +1,187 @@
+/* DOMINION manual: print-first, A4 portrait. Edge prints it (build.py).
+   A lab-protocol look: serif body, sans headings, one teal accent. */
+:root {
+  --ink: #1d2326;
+  --muted: #5d666b;
+  --faint: #9aa3a7;
+  --rule: #d9dedc;
+  --wash: #f1f4f3;
+  --accent: #0f6e6a;        /* teal: the tessellation */
+  --accent-wash: #e8f2f1;
+  --second: #8a3b8f;        /* magenta: skeletons, cautions */
+  --second-wash: #f5ecf5;
+  --head: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --body: Cambria, Georgia, "Times New Roman", serif;
+  --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+}
+
+@page {
+  size: A4;
+  margin: 17mm 18mm 19mm 18mm;
+  @bottom-left {
+    content: "DOMINION  \00B7  User manual";
+    font: 7.5pt "Segoe UI", sans-serif; color: #9aa3a7; letter-spacing: .06em;
+  }
+  @bottom-right {
+    content: counter(page);
+    font: 600 8pt "Segoe UI", sans-serif; color: #5d666b;
+  }
+}
+@page cover { margin: 0; @bottom-left { content: none } @bottom-right { content: none } }
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; color: var(--ink); background: #fff; font: 9.5pt/1.46 var(--body); }
+
+/* ---------------------------------------------------------------- cover */
+.cover {
+  page: cover; break-after: page;
+  width: 210mm; height: 297mm; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; padding: 22mm 22mm 18mm;
+}
+.cover .top { display: flex; align-items: center; gap: 6mm; }
+.cover .logo { width: 19mm; height: 19mm; }
+.cover .kicker { font: 400 8.5pt var(--head); letter-spacing: .4em; color: var(--muted); text-transform: uppercase; }
+.cover h1 { font: 300 46pt/1 var(--head); letter-spacing: .2em; margin: 2mm 0 0; }
+.cover .acro { font: 400 11.5pt var(--head); color: var(--muted); margin-top: 6mm; letter-spacing: .02em; }
+.cover .acro b { color: var(--accent); font-weight: 600; }
+.cover .sub { font: italic 13pt/1.45 var(--body); color: #3a4246; margin-top: 4mm; max-width: 150mm; }
+.cover .hero { margin-top: 11mm; width: 166mm; height: 150mm; border-radius: 2.5mm; overflow: hidden; position: relative; }
+.cover .hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover .hero .cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 3mm 4mm;
+  background: linear-gradient(transparent, rgba(0,0,0,.72)); color: #e9efee; font: 8pt/1.4 var(--head);
+}
+.cover .foot {
+  margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end;
+  border-top: .6pt solid var(--rule); padding-top: 4mm; font: 8pt/1.5 var(--head); color: var(--muted);
+}
+
+/* ------------------------------------------------------------- chapters */
+.chapter { break-before: page; }
+.sec-head {
+  display: grid; grid-template-columns: 17mm 1fr; gap: 5mm; align-items: start;
+  padding-bottom: 4.5mm; margin-bottom: 5.5mm; border-bottom: 1.2pt solid var(--ink);
+}
+.sec-head .num {
+  font: 300 30pt/1 var(--head); color: var(--accent); text-align: right; padding-top: 1.5mm;
+}
+.sec-head .kicker { font: 400 7.6pt var(--head); letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
+.sec-head h1 { font: 600 23pt/1.08 var(--head); margin: 1mm 0 1.5mm; letter-spacing: .01em; }
+.sec-head .lede { margin: 0; font: italic 11pt/1.45 var(--body); color: #3a4246; max-width: 150mm; }
+
+h2 { font: 600 12.5pt var(--head); margin: 6.5mm 0 2mm; break-after: avoid; }
+h2 .tag { font-weight: 400; color: var(--muted); font-size: 9.5pt; margin-left: 2mm; }
+h3 { font: 600 8.6pt var(--head); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 4.5mm 0 1.5mm; break-after: avoid; }
+p { margin: 0 0 2.4mm; }
+ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
+li { margin-bottom: 1mm; }
+a { color: var(--accent); text-decoration: none; }
+
+/* words from the screen: buttons, controls, section names */
+.ui { font: 600 .88em var(--head); background: var(--wash); border: .5pt solid var(--rule); border-radius: 1.2pt; padding: 0 .35em; white-space: nowrap; }
+.sec { font: 600 .9em var(--head); color: var(--accent); white-space: nowrap; }
+code, .mono { font: .86em var(--mono); background: var(--wash); border-radius: 1pt; padding: 0 .25em; }
+pre {
+  font: 8.2pt/1.45 var(--mono); background: #f6f8f7; border: .5pt solid var(--rule); border-left: 2.2pt solid var(--accent);
+  padding: 2.5mm 3.5mm; margin: 1.5mm 0 4mm; white-space: pre-wrap; break-inside: avoid;
+}
+pre .c { color: var(--muted); }
+.path { font: .86em var(--mono); white-space: nowrap; }
+
+/* figures */
+figure { margin: 2mm 0 5mm; break-inside: avoid; }
+figure img { display: block; max-width: 100%; }
+figure img.win { width: 100%; border-radius: 1.5mm; border: .5pt solid #3b4146; }
+figure img.view { width: 100%; border-radius: 1.5mm; }
+figure img.panel { border-radius: 1mm; border: .5pt solid #3b4146; }
+figcaption { font: 8pt/1.45 var(--head); color: var(--muted); margin-top: 2mm; }
+figcaption b { color: var(--ink); }
+
+/* a dock section beside its explanation */
+.side { display: grid; grid-template-columns: 72mm 1fr; gap: 7mm; align-items: start; margin: 2mm 0 4mm; }
+.side figure { margin: 0; }
+.side img.panel { width: 72mm; }
+.side.wide { grid-template-columns: 1fr 1fr; }
+
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 3mm 0 5mm; break-inside: avoid; }
+.row3 figure { margin: 0; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 3mm 0 5mm; break-inside: avoid; }
+.row2 figure { margin: 0; }
+
+/* parameter tables */
+table.params { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; font-size: 8.5pt; line-height: 1.38; }
+table.params th {
+  font: 400 6.9pt var(--head); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 0 2.5mm 1.5mm 0; border-bottom: .8pt solid var(--ink);
+}
+table.params td { padding: 1.4mm 2.5mm 1.4mm 0; border-bottom: .5pt solid var(--rule); vertical-align: top; }
+table.params tr { break-inside: avoid; }
+table.params td.name { font: 600 8.6pt var(--head); width: 34mm; }
+table.params td.rng { font: 8pt var(--head); color: #3a4246; width: 27mm; }
+table.params td.when { font: 8pt var(--head); color: var(--muted); width: 18mm; }
+
+/* column reference */
+table.cols { width: 100%; border-collapse: collapse; font-size: 8.6pt; margin: 1mm 0 4mm; }
+table.cols th { font: 400 6.9pt var(--head); letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 0 3mm 1.4mm 0; border-bottom: .8pt solid var(--ink); }
+table.cols td { padding: 1.2mm 3mm 1.2mm 0; border-bottom: .5pt solid var(--rule); vertical-align: top; }
+table.cols td.c { font: 8pt var(--mono); white-space: nowrap; width: 58mm; }
+table.cols tr { break-inside: avoid; }
+
+/* callouts */
+.box { padding: 3mm 4mm 2mm; margin: 3mm 0 5mm; break-inside: avoid; background: var(--accent-wash); border-left: 2.2pt solid var(--accent); }
+.box .t { font: 600 7.8pt var(--head); letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1mm; }
+.box.warn { background: var(--second-wash); border-left-color: var(--second); }
+.box.warn .t { color: var(--second); }
+.box ul { margin: 0; padding-left: 4.5mm; }
+
+/* numbered steps */
+ol.steps { list-style: none; margin: 2mm 0 4mm; padding: 0; counter-reset: s; }
+ol.steps > li { position: relative; padding: 0 0 0 10.5mm; margin-bottom: 3.3mm; counter-increment: s; break-inside: avoid; }
+ol.steps > li::before {
+  content: counter(s); position: absolute; left: 0; top: -.3mm; width: 6.6mm; height: 6.6mm; border-radius: 50%;
+  border: 1.2pt solid var(--accent); color: var(--accent); display: grid; place-items: center; font: 600 9.5pt var(--head);
+}
+ol.steps b { font-family: var(--head); font-size: 9.8pt; }
+
+/* diagrams */
+.diagram { margin: 3mm 0 5mm; break-inside: avoid; }
+.diagram svg { width: 100%; height: auto; display: block; }
+.flow text { font-family: "Segoe UI", sans-serif; fill: #1d2326; }
+.flow .bt { font-size: 12.5px; font-weight: 600; text-anchor: middle; }
+.flow .bs { font-size: 10px; fill: #5d666b; text-anchor: middle; }
+.flow .lb { font-size: 10px; fill: #0f6e6a; font-weight: 600; letter-spacing: 1.5px; }
+.flow rect.box2 { fill: #fff; stroke: #1d2326; stroke-width: 1.3; }
+.flow rect.boxa { fill: #e8f2f1; stroke: #0f6e6a; stroke-width: 1.3; }
+.flow rect.boxm { fill: #f5ecf5; stroke: #8a3b8f; stroke-width: 1.3; }
+.flow .wire { stroke: #1d2326; stroke-width: 1.3; fill: none; }
+
+/* two install paths */
+.paths { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 2mm 0 4mm; break-inside: avoid; }
+.paths > div { border: .6pt solid var(--rule); border-top: 2.4pt solid var(--accent); padding: 3mm 3.5mm 1.5mm; }
+.paths > div.full { border-top-color: var(--second); }
+.paths h4 { font: 600 11pt var(--head); margin: 0 0 1mm; }
+.paths p { font-size: 9pt; }
+
+/* troubleshooting */
+dl.trouble { margin: 0; }
+dl.trouble dt { font: 600 9.4pt var(--head); margin-top: 3.4mm; break-after: avoid; }
+dl.trouble dd { margin: 1mm 0 0 0; padding-left: 4mm; border-left: 1.4pt solid var(--rule); break-inside: avoid; }
+
+/* build.py's page finder: takes no space, invisible */
+.mark { position: absolute; font-size: 2px; color: #fff; }
+
+/* ------------------------------------------------------------- contents */
+.toc { break-after: page; padding-top: 8mm; }
+.toc h1 { font: 300 28pt var(--head); letter-spacing: .14em; margin: 0 0 3mm; }
+.toc .intro { color: var(--muted); max-width: 145mm; margin-bottom: 8mm; font-style: italic; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { display: flex; align-items: baseline; gap: 3mm; padding: 1.7mm 0; border-bottom: .5pt solid var(--rule); margin: 0; }
+.toc li .n { font: 300 11pt var(--head); color: var(--accent); width: 7mm; }
+.toc li .t { font: 600 10.8pt var(--head); }
+.toc li .d { color: var(--muted); font-size: 9pt; flex: 1; font-style: italic; }
+.toc li .pg { font: 600 10.8pt var(--head); color: var(--accent); min-width: 8mm; text-align: right; }
+.pg { font-family: var(--head); }
+.newpage { break-before: page; }
+.keep { break-inside: avoid; }
