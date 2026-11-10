@@ -9,7 +9,7 @@ type: software
 authors:
   - given-names: Garrick
     family-names: Salois
-version: 0.3.0
+version: 0.3.1
 license: MIT
 repository-code: "https://github.com/GSNautilus/Dominion"
 keywords:
